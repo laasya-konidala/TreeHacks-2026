@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build/output
+dist/
+out/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and env
+*.log
+.env
+.env.local
+
+# Electron
+*.asar
