@@ -13,10 +13,10 @@ function createOverlay() {
     x: screenWidth - panelWidth,
     y: 0,
     frame: false,
+    transparent: true,
     alwaysOnTop: true,
     resizable: false,
     backgroundColor: '#00000000',
-    vibrancy: 'hud',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
