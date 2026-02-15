@@ -12,12 +12,61 @@ const CAPTURE_HEIGHT = 720;
 
 // ─── State ─────────────────────────────────────────────────────────
 let sidebarWindow = null;
+let characterWindow = null;
+let sidebarVisible = false;
 let captureInterval = null;
 let sessionActive = false;
 let genai = null;       // GoogleGenAI instance
 let contextBuffer = []; // rolling buffer of recent observations
 const MAX_CONTEXT = 10; // keep last 10 observations
 let agentWs = null;     // WebSocket to Python agent backend
+
+// ─── Create floating character window ───────────────────────────────
+function createCharacter() {
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().bounds;
+
+  characterWindow = new BrowserWindow({
+    width: 100,
+    height: 100,
+    x: screenWidth - 490, // to the left of the sidebar
+    y: screenHeight - 140,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  characterWindow.loadFile(path.join(__dirname, 'character.html'));
+  characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Allow dragging but let clicks through transparent areas
+  characterWindow.setIgnoreMouseEvents(false);
+}
+
+// ─── Move character window (manual drag) ───────────────────────────
+ipcMain.on('move-character', (_event, dx, dy) => {
+  if (!characterWindow || characterWindow.isDestroyed()) return;
+  const [x, y] = characterWindow.getPosition();
+  characterWindow.setPosition(x + dx, y + dy);
+});
+
+// ─── Toggle sidebar visibility ─────────────────────────────────────
+ipcMain.on('toggle-sidebar', () => {
+  if (!sidebarWindow || sidebarWindow.isDestroyed()) return;
+  sidebarVisible = !sidebarVisible;
+  if (sidebarVisible) {
+    sidebarWindow.show();
+  } else {
+    sidebarWindow.hide();
+  }
+});
 
 // ─── Create the sidebar overlay window ─────────────────────────────
 function createSidebar() {
@@ -48,7 +97,7 @@ function createSidebar() {
   sidebarWindow.setIgnoreMouseEvents(false);
 
   sidebarWindow.once('ready-to-show', () => {
-    sidebarWindow.show();
+    sidebarWindow.hide(); // start hidden, click the cat to show
     sendStatus('ready', 'Click the toggle to start a session.');
   });
 }
@@ -357,6 +406,9 @@ ipcMain.on('toggle-session', async () => {
     sessionActive = false;
     contextBuffer = [];
     sendStatus('ready', 'Session stopped. Click to start again.');
+    if (characterWindow && !characterWindow.isDestroyed()) {
+      characterWindow.webContents.send('session-state', false);
+    }
   } else {
     // Initialize genai if needed
     try {
@@ -379,6 +431,9 @@ ipcMain.on('toggle-session', async () => {
       }
 
       sessionActive = true;
+      if (characterWindow && !characterWindow.isDestroyed()) {
+        characterWindow.webContents.send('session-state', true);
+      }
     } catch (err) {
       console.error('[Session] Failed to start:', err.message);
       sendStatus('error', `Failed to start: ${err.message}`);
@@ -403,6 +458,7 @@ app.whenReady().then(() => {
     }
   }
   createSidebar();
+  createCharacter();
 });
 
 app.on('window-all-closed', () => {

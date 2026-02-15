@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('gemini-response', (_event, data) => callback(data));
   },
 
-  // Receive status updates (connected, disconnected, capturing, etc.)
+  // Receive status updates
   onStatusUpdate: (callback) => {
     ipcRenderer.on('status-update', (_event, data) => callback(data));
   },
@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld('api', {
   // Tell main process to start/stop the session
   toggleSession: () => {
     ipcRenderer.send('toggle-session');
+  },
+
+  // Toggle sidebar visibility (from character window)
+  toggleSidebar: () => {
+    ipcRenderer.send('toggle-sidebar');
+  },
+
+  // Move the character window by a delta (for manual drag)
+  moveWindow: (dx, dy) => {
+    ipcRenderer.send('move-character', dx, dy);
   },
 
   // Mic start/stop signals from main
@@ -37,5 +47,10 @@ contextBridge.exposeInMainWorld('api', {
   // Simple agent trigger (Gemini detected user is stuck/confused)
   onAgentTriggered: (callback) => {
     ipcRenderer.on('agent-triggered', (_event, data) => callback(data));
+  },
+
+  // Session state for character pulse animation
+  onSessionState: (callback) => {
+    ipcRenderer.on('session-state', (_event, active) => callback(active));
   },
 });
