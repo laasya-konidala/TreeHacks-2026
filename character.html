@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .avatar-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .avatar-container img {
+      width: 80px;
+      height: auto;
+      pointer-events: none;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+      transition: transform 0.15s ease;
+    }
+
+    .avatar-container:active img {
+      transform: scale(0.93);
+    }
+
+    /* Pulse ring */
+    .pulse-ring {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      animation: pulse 2s ease-out infinite;
+      pointer-events: none;
+    }
+
+    .pulse-ring.active {
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="avatar-container" id="avatarContainer">
+    <div class="pulse-ring" id="pulseRing"></div>
+    <img id="avatarImg" alt="Plato">
+  </div>
+
+  <script>
+    const avatarImg = document.getElementById('avatarImg');
+    const pulseRing = document.getElementById('pulseRing');
+
+    const FRAME_COUNT = 51;
+    const FRAME_RATE = 100;
+
+    // Build frame paths
+    const framePaths = [];
+    for (let i = 0; i < FRAME_COUNT; i++) {
+      const padded = String(i).padStart(2, '0');
+      framePaths.push(`learning-companion-extension/assets/plato/frame_${padded}.svg`);
+    }
+
+    // Preload
+    framePaths.forEach(p => { const img = new Image(); img.src = p; });
+
+    // Set initial frame
+    avatarImg.src = framePaths[0];
+
+    // Animate
+    let currentFrame = 0;
+    setInterval(() => {
+      currentFrame = (currentFrame + 1) % FRAME_COUNT;
+      avatarImg.src = framePaths[currentFrame];
+    }, FRAME_RATE);
+
+    // ── Drag + Click detection ──
+    // We handle window dragging manually so clicks still work.
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragMoved = false;
+
+    avatarContainer.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      dragMoved = false;
+      dragStartX = e.screenX;
+      dragStartY = e.screenY;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.screenX - dragStartX;
+      const dy = e.screenY - dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        dragMoved = true;
+        // Move the window by the delta
+        window.api.moveWindow(dx, dy);
+        dragStartX = e.screenX;
+        dragStartY = e.screenY;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging && !dragMoved) {
+        // It was a click, not a drag
+        window.api.toggleSidebar();
+      }
+      isDragging = false;
+      dragMoved = false;
+    });
+
+    // Listen for session state
+    window.api.onSessionState((active) => {
+      pulseRing.classList.toggle('active', active);
+    });
+  </script>
+</body>
+</html>
