@@ -562,8 +562,9 @@
     });
 
     // ── IPC listeners ──
-    window.api.onStartMic(() => startSpeechRecognition());
-    window.api.onStopMic(() => stopSpeechRecognition());
+    // Speech recognition disabled — causes chunked_data_pipe spam in Electron
+    window.api.onStartMic(() => { /* disabled */ });
+    window.api.onStopMic(() => { /* disabled */ });
 
     // ── Visualization rendering ──
     const BACKEND_ORIGIN = 'http://localhost:8080';
@@ -727,7 +728,7 @@
     window.api.onGeminiResponse((data) => {
       emptyState.style.display = 'none';
 
-      // Detect mode from response
+      // Detect mode from response and update the header indicator
       let mode = '';
       const text = data.text;
       if (text.includes('"CONCEPTUAL"') || text.includes("CONCEPTUAL")) mode = 'CONCEPTUAL';
@@ -736,41 +737,9 @@
 
       if (mode) updateAgentDisplay(mode);
 
-      const item = document.createElement('div');
-      item.className = `feed-item ${mode ? 'mode-' + mode : ''}`;
-
-      const time = new Date(data.timestamp);
-      const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-      // Try to parse and display nicely
-      let displayText = text;
-      try {
-        // Extract JSON from response (might have markdown fences)
-        const jsonMatch = text.match(/\{[\s\S]*?\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          displayText = `📋 ${parsed.activity || 'unknown'}\n📚 ${parsed.topic || 'unknown'}\n🧠 ${parsed.mode || 'unknown'}`;
-          if (parsed.stuck) displayText += '\n⚠️ Might be stuck';
-          if (parsed.notes) displayText += `\n💬 ${parsed.notes}`;
-        }
-      } catch (e) {
-        // Not JSON, show raw text
-      }
-
-      item.innerHTML = `
-        <div class="time">${timeStr}</div>
-        <div class="text">${escapeHtml(displayText)}</div>
-      `;
-
-      feed.appendChild(item);
-
-      // Keep max 30 items
-      const items = feed.querySelectorAll('.feed-item');
-      while (items.length > 30 && feed.children.length > 31) {
-        feed.removeChild(feed.children[1]);
-      }
-
-      feed.scrollTop = feed.scrollHeight;
+      // Don't add VLM observations to the feed — they bury agent responses.
+      // The mode indicator in the header is enough visual feedback.
+      console.log('[VLM] mode:', mode, '| text length:', text.length);
     });
 
     window.api.onStatusUpdate((data) => {

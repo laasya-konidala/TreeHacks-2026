@@ -81,10 +81,10 @@ state = {
 }
 
 # ─── Config ───
-MIN_SECONDS_BETWEEN_PROMPTS = 45    # hard cooldown between prompts
-NATURAL_PAUSE_MIN_SECONDS = 25      # time on topic before pause triggers
-STUCK_THRESHOLD_SECONDS = 60        # stuck timer
-FALLBACK_PROMPT_SECONDS = 180       # safety net
+MIN_SECONDS_BETWEEN_PROMPTS = 15    # hard cooldown between prompts
+NATURAL_PAUSE_MIN_SECONDS = 10      # time on topic before pause triggers
+STUCK_THRESHOLD_SECONDS = 30        # stuck timer
+FALLBACK_PROMPT_SECONDS = 60        # safety net
 MAX_OBSERVATIONS = 20
 STUCK_OBSERVATION_COUNT = 5         # how many "incomplete" work_status in a row = stuck
 _poll_count = 0                     # debug counter for VLM observations
