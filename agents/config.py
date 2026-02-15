@@ -33,6 +33,11 @@ CLAUDE_MODEL = "claude-sonnet-4-5"
 AGENTVERSE_ENABLED = os.environ.get("AGENTVERSE_ENABLED", "false").lower() == "true"
 AGENTVERSE_URL = os.environ.get("AGENTVERSE_URL", "https://agentverse.ai")
 
+# ─── Zoom (Meeting SDK, OAuth) ───
+ZOOM_CLIENT_ID = os.environ.get("ZOOM_CLIENT_ID", "")
+ZOOM_CLIENT_SECRET = os.environ.get("ZOOM_CLIENT_SECRET", "")
+ZOOM_REDIRECT_URI = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:8080/zoom/oauth/callback")
+
 # ─── Prompting Timing ───
 MIN_SECONDS_BETWEEN_PROMPTS = 30    # don't spam
 NATURAL_PAUSE_THRESHOLD = 15        # seconds before considering a prompt

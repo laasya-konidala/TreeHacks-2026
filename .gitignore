@@ -21,6 +21,8 @@ Thumbs.db
 .env
 .env.*
 .env.local
+.zoom_tokens.json
+.zoom_meeting.json
 
 # Python
 __pycache__/

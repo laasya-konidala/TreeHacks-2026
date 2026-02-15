@@ -4,16 +4,31 @@ Merges data from two sources:
   1. Electron/Gemini VLM (screen analysis: topic, stuck, work_status, confusion)
   2. Chrome extension (behavioral: typing speed, deletions, pauses, scroll-back)
 Runs on port 8080.
+Also: Zoom OAuth and meeting creation.
 """
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 import asyncio
 import json
 import logging
 import time
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+
+import httpx
+from input_pipeline.zoom_client import (
+    exchange_code_for_tokens,
+    get_authorize_url,
+    get_or_create_persistent_meeting,
+    is_connected,
+    reset_persistent_meeting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +57,10 @@ reply_queue: asyncio.Queue = asyncio.Queue()
 class TouchRequest(BaseModel):
     message: str = ""
     user_id: str = "default"
+
+
+class CreateMeetingRequest(BaseModel):
+    topic: str = "Learning Companion Call"
 
 
 # ─── Context Merging ───
@@ -241,3 +260,113 @@ async def health():
         "has_gemini_data": _gemini_buffer["data"] is not None,
         "has_behavioral_data": _behavioral_buffer["data"] is not None,
     }
+
+
+# ─── Zoom OAuth and Meetings ───
+
+@app.get("/zoom/auth")
+async def zoom_auth_url():
+    """Get Zoom OAuth authorize URL. Open this in browser to connect Zoom."""
+    try:
+        url = get_authorize_url()
+        return {"url": url}
+    except ValueError as e:
+        return {"error": str(e), "url": None}
+
+
+@app.get("/zoom/oauth/callback")
+async def zoom_oauth_callback(code: str = Query(...)):
+    """
+    OAuth callback. Zoom redirects here after user authorizes.
+    Exchange code for tokens, then redirect to a success page.
+    """
+    try:
+        exchange_code_for_tokens(code)
+        # Redirect to a simple success page (we'll host this or use data URL)
+        return RedirectResponse(url="data:text/html,<h1>Zoom connected!</h1><p>You can close this tab and return to the app.</p>")
+    except Exception as e:
+        logger.exception("Zoom OAuth callback failed")
+        return RedirectResponse(
+            url=f"data:text/html,<h1>Error</h1><p>{str(e)}</p><p>Check server logs.</p>"
+        )
+
+
+@app.get("/realtime/config")
+async def realtime_config():
+    """
+    Get ephemeral key and instructions for OpenAI Realtime voice agent.
+    Requires OPENAI_API_KEY and REALTIME_INSTRUCTIONS in .env.
+    """
+    import os
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    instructions = os.environ.get("REALTIME_INSTRUCTIONS", "You are a helpful assistant.").strip()
+    if not api_key or api_key.startswith("paste_"):
+        return {"error": "OPENAI_API_KEY not set. Add it to .env"}
+    try:
+        session_config = {
+            "session": {
+                "type": "realtime",
+                "model": "gpt-realtime",
+                "instructions": instructions,
+                "audio": {"output": {"voice": "marin"}},
+            }
+        }
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                "https://api.openai.com/v1/realtime/client_secrets",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=session_config,
+                timeout=15.0,
+            )
+            r.raise_for_status()
+            data = r.json()
+        ephemeral_key = data.get("value") or data.get("client_secret", {}).get("value")
+        if not ephemeral_key:
+            return {"error": "No ephemeral key in response"}
+        return {"apiKey": ephemeral_key, "instructions": instructions}
+    except httpx.HTTPStatusError as e:
+        try:
+            err = e.response.json()
+            msg = err.get("error", {}).get("message", str(e))
+        except Exception:
+            msg = str(e)
+        return {"error": f"OpenAI API error: {msg}"}
+
+
+@app.get("/zoom/status")
+async def zoom_status():
+    """Check if Zoom is connected (has valid tokens)."""
+    return {"connected": is_connected()}
+
+
+@app.post("/zoom/reset-meeting")
+async def zoom_reset_meeting():
+    """Clear stored meeting so the next call creates a new one."""
+    reset_persistent_meeting()
+    return {"ok": True}
+
+
+@app.post("/zoom/create-meeting")
+async def zoom_create_meeting(body: Optional[CreateMeetingRequest] = None):
+    """
+    Create a Zoom meeting. Returns join_url, meeting_id, etc.
+    Requires Zoom to be connected first (OAuth).
+    """
+    topic = (body or CreateMeetingRequest()).topic
+    try:
+        meeting = get_or_create_persistent_meeting(topic=topic)
+        return {
+            "join_url": meeting["join_url"],
+            "meeting_id": meeting["meeting_id"],
+            "password": meeting.get("password", ""),
+        }
+    except ValueError as e:
+        return {"error": str(e), "join_url": None}
+    except httpx.HTTPStatusError as e:
+        try:
+            err_body = e.response.json()
+            msg = err_body.get("message", err_body.get("reason", str(e)))
+        except Exception:
+            msg = str(e)
+        logger.warning("Zoom API error %s: %s", e.response.status_code, msg)
+        return {"error": f"Zoom API error: {msg}", "join_url": None}
