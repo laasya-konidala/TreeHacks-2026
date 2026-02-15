@@ -4,11 +4,13 @@ Agent 1: Conceptual Understanding (Building Knowledge)
 Triggered when: student is watching a video, reading notes, learning new concepts.
 Goal: help them build and verify understanding of what they're consuming.
 
-Uses shared tools (question, visualization, review) but frames everything
-through a "do you understand what you're seeing?" lens.
+2 tools:
+  - question: Socratic/comprehension question calibrated by mastery + trigger reason
+  - visualization: suggest a diagram or mental model
 
-LLM: Claude (via Anthropic API) for high-quality exercise generation.
+LLM: Claude (via Anthropic API).
 """
+import json
 import logging
 import anthropic
 from uagents import Agent, Context
@@ -34,7 +36,7 @@ conceptual_agent = Agent(
     mailbox=AGENTVERSE_ENABLED,
     description=(
         "Conceptual Understanding agent — helps students build knowledge "
-        "by generating contextual questions, visualizations, and checks "
+        "by generating contextual questions and visualizations "
         "based on what they're currently watching or reading."
     ),
 )
@@ -42,81 +44,85 @@ conceptual_agent = Agent(
 # ─── Claude Client ───
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
+
 # ─── Tool Selection Prompt ───
-TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is currently building conceptual understanding (watching a video, reading notes, learning something new).
+TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is building conceptual understanding.
 
-Pick the BEST tool to use right now. Choose ONE:
-- "question": Ask a comprehension question about what they're currently seeing
-- "visualization": Suggest a way to visualize/diagram the concept to deepen understanding
-- "review": Briefly summarize or connect what they're learning to something they already know
+You have 2 tools. Pick ONE based on the trigger reason, mastery, and what's on screen:
 
-Respond with ONLY a JSON object:
-{"tool": "question|visualization|review", "reasoning": "why this tool right now"}"""
+"question" — Ask a Socratic/comprehension question. Use when:
+  - natural_pause + any mastery: check understanding of what they just saw
+  - stuck: ask a simpler guiding question to unstick them
+  - mode_change: bridge question connecting what they were doing to what they're doing now
+  - topic_transition: ask about the connection between old and new topic
+  - Low mastery: basic "what is" / definition questions
+  - Medium mastery: "why" / "how does this relate" questions
+  - High mastery: "what if" / extension / edge-case questions
 
-TOOL_SELECTION_USER = """Current screen context:
-{vlm_context}
+"visualization" — Suggest a diagram or mental model. Use when:
+  - The content is abstract (equations, theory, complex relationships)
+  - A visual would genuinely help more than a question
+  - The student has been reading/watching for a while and might benefit from a different angle
 
-Their mastery of "{topic}" is {mastery}% ({mastery_quality} confidence).
+Default to "question" if unsure.
+
+Respond with ONLY: {"tool": "question|visualization", "reasoning": "brief reason"}"""
+
+TOOL_SELECTION_USER = """Screen details:
+{screen_details}
+
+Topic: {topic} | Mastery: {mastery}% ({mastery_quality}) | Trigger: {trigger_reason}
 
 Recent activity:
-{recent_observations}
+{recent_observations}"""
 
-{speech_context}"""
 
 # ─── Exercise Generation Prompts ───
-QUESTION_SYSTEM = """You are a Socratic learning companion. The student is currently watching/reading about a topic. Based on what's on their screen, ask ONE targeted comprehension question.
+QUESTION_SYSTEM = """You are a Socratic learning companion. Based on EXACTLY what's on the student's screen, ask ONE targeted question.
+
+Adapt based on the trigger reason:
+- natural_pause: "Before you move on..." — check they understood what they just saw
+- topic_transition: "You just went from X to Y..." — connect the two
+- stuck: Ask something SIMPLER to guide them — don't add pressure
+- mode_change: Bridge theory ↔ practice — "Now that you're coding, how does X apply?"
+- fallback: General comprehension check
 
 Rules:
-- Reference EXACTLY what's on their screen (specific equations, diagrams, code, etc.)
+- Reference SPECIFIC things from screen_details (exact equations, code, question text, etc.)
 - Ask ONE clear question, not multiple
 - Don't give the answer — make them think
-- Be concise and conversational, like a study buddy
+- Be concise and conversational, like a smart study buddy
 - 2-3 sentences max"""
 
-QUESTION_USER = """What's on their screen right now:
-{vlm_context}
+QUESTION_USER = """Screen details:
+{screen_details}
 
-Their mastery of "{topic}" is {mastery}% — calibrate difficulty accordingly.
-- Low mastery (0-30%): Ask about basic definitions or "what is" questions
-- Medium mastery (30-70%): Ask "why" or "how does this relate to" questions  
-- High mastery (70-100%): Ask "what would happen if" or "can you explain why NOT" questions
+Topic: {topic} | Mastery: {mastery}% | Trigger: {trigger_reason}
 
-{speech_context}"""
+Calibrate difficulty:
+- Low mastery (0-30%): "what is" / definition / basic recall
+- Medium mastery (30-70%): "why does" / "how does this relate to" / reasoning
+- High mastery (70-100%): "what would happen if" / "can you explain why NOT" / edge cases"""
 
-VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a quick mental visualization or diagram that would help the student understand what's on screen.
+VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a specific mental visualization or diagram for what the student is looking at.
 
 Rules:
-- Describe a specific visualization related to what's on screen
+- Describe a SPECIFIC visualization tied to what's on their screen
 - Make it concrete: "Imagine..." or "Picture this..."
-- Keep it to 2-3 sentences
-- Connect the visualization to the specific content they're looking at"""
+- If it's math: suggest a geometric interpretation or concrete example
+- If it's code: suggest a flow diagram or state trace
+- If it's theory: suggest an analogy from everyday life
+- Keep it to 2-4 sentences
+- It should help them understand, not just be decorative"""
 
-VISUALIZATION_USER = """What's on their screen right now:
-{vlm_context}
+VISUALIZATION_USER = """Screen details:
+{screen_details}
 
-Their mastery of "{topic}" is {mastery}%.
-
-{speech_context}"""
-
-REVIEW_SYSTEM = """You are a learning companion. Briefly connect what the student is currently learning to something foundational or previously covered.
-
-Rules:
-- One quick connection or summary
-- Reference what's specifically on their screen
-- "Remember when you learned X? This builds on that because..."
-- 2-3 sentences max"""
-
-REVIEW_USER = """What's on their screen right now:
-{vlm_context}
-
-Their mastery of "{topic}" is {mastery}%.
-
-{speech_context}"""
+Topic: {topic} | Mastery: {mastery}% | Trigger: {trigger_reason}"""
 
 TOOL_PROMPTS = {
     "question": (QUESTION_SYSTEM, QUESTION_USER),
     "visualization": (VISUALIZATION_SYSTEM, VISUALIZATION_USER),
-    "review": (REVIEW_SYSTEM, REVIEW_USER),
 }
 
 
@@ -131,20 +137,44 @@ def _call_claude(system: str, user_msg: str, max_tokens: int = 300) -> str:
     return response.content[0].text
 
 
+def _extract_screen_details(raw_vlm_text: str, activity: str, topic: str) -> str:
+    """
+    Extract the specific screen_details from the raw VLM data.
+    Falls back to activity + topic if screen_details is missing.
+    """
+    try:
+        data = json.loads(raw_vlm_text) if raw_vlm_text else {}
+        # screen_details comes from the VLM's detailed screen description
+        details = data.get("gemini_screen_details", "")
+        if details:
+            return details
+        # Fallback: try the screen_content field
+        content = data.get("screen_content", "")
+        if content:
+            return content
+    except Exception:
+        pass
+    return f"{activity} — {topic}"
+
+
 # ─── Message Handler ───
 @conceptual_agent.on_message(model=AgentRequest)
 async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     """Handle a request from the orchestrator."""
-    logger.info(f"[Conceptual] Received request — topic: {msg.vlm_context.topic}, mastery: {msg.mastery:.0%}")
-
-    vlm_text = msg.vlm_context.raw_vlm_text or f"{msg.vlm_context.activity} — {msg.vlm_context.topic}"
+    trigger_reason = msg.trigger_reason or "fallback"
     topic = msg.vlm_context.topic or "the current topic"
     mastery_pct = round(msg.mastery * 100)
     mastery_quality = msg.mastery_quality
 
-    speech_context = ""
-    if msg.vlm_context.speech_transcript:
-        speech_context = f'The student just said: "{msg.vlm_context.speech_transcript}"'
+    # Extract the specific screen details (not the raw JSON dump)
+    screen_details = _extract_screen_details(
+        msg.vlm_context.raw_vlm_text,
+        msg.vlm_context.activity,
+        topic,
+    )
+
+    logger.info(f"[Conceptual] Request — topic: {topic}, mastery: {mastery_pct}%, trigger: {trigger_reason}")
+    logger.info(f"[Conceptual] Screen: {screen_details[:120]}")
 
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
@@ -152,20 +182,18 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     tool = "question"  # default
     try:
         tool_user_msg = TOOL_SELECTION_USER.format(
-            vlm_context=vlm_text,
+            screen_details=screen_details,
             topic=topic,
             mastery=mastery_pct,
             mastery_quality=mastery_quality,
+            trigger_reason=trigger_reason,
             recent_observations=recent_obs,
-            speech_context=speech_context,
         )
 
         tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
 
         if '"visualization"' in tool_text:
             tool = "visualization"
-        elif '"review"' in tool_text:
-            tool = "review"
         else:
             tool = "question"
 
@@ -179,10 +207,10 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     try:
         system_prompt, user_template = TOOL_PROMPTS[tool]
         exercise_user_msg = user_template.format(
-            vlm_context=vlm_text,
+            screen_details=screen_details,
             topic=topic,
             mastery=mastery_pct,
-            speech_context=speech_context,
+            trigger_reason=trigger_reason,
         )
 
         content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
@@ -202,4 +230,4 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     )
 
     await ctx.send(sender, response)
-    logger.info(f"[Conceptual] Response sent — tool: {tool}")
+    logger.info(f"[Conceptual] Response sent — tool: {tool}, trigger: {trigger_reason}")

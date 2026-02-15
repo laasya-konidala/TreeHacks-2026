@@ -47,6 +47,7 @@ state = {
     "last_mode": "",
     "same_content_since": 0.0,    # when we first saw this topic
     "prompt_count": 0,
+    "stuck_count": 0,              # consecutive incomplete/incorrect observations
     "observations": [],            # rolling buffer of VLM observations
     "agent_addresses": {
         "conceptual": None,
@@ -56,9 +57,12 @@ state = {
 }
 
 # ─── Config ───
-MIN_SECONDS_BETWEEN_PROMPTS = 30   # don't spam
-NATURAL_PAUSE_THRESHOLD = 15       # seconds on same content before considering a prompt
+MIN_SECONDS_BETWEEN_PROMPTS = 45    # hard cooldown — never prompt faster than this
+NATURAL_PAUSE_MIN_SECONDS = 25      # need at least 25s on topic before natural_pause triggers
+STUCK_THRESHOLD_SECONDS = 60        # 60s on same topic + VLM says stuck → stuck trigger
+FALLBACK_PROMPT_SECONDS = 180       # 3 min — safety net so system doesn't go completely silent
 MAX_OBSERVATIONS = 20
+STUCK_OBSERVATION_COUNT = 5         # how many "incomplete" work_status in a row = stuck
 
 
 def _resolve_agent_addresses():
@@ -82,44 +86,72 @@ def should_prompt_now(vlm: VLMContext) -> tuple[bool, str]:
     """
     Decide if NOW is a good time to prompt the student.
     Returns (should_prompt, reason).
+
+    Priority chain:
+      1. Hard cooldown (30s) — always respected
+      2. Immediate triggers: topic_transition, mode_change
+      3. Natural pause: VLM says natural_pause AND 20s+ on topic
+      4. Stuck: VLM says stuck AND 60s+ on topic (or repeated incomplete work)
+      5. Fallback: 90s on same topic — safety net so system doesn't go silent
     """
     now = time.time()
 
-    # Cooldown: don't prompt too often
+    # ── 1. Hard cooldown — never prompt faster than this ──
     time_since_last = now - state["last_prompt_time"]
     if time_since_last < MIN_SECONDS_BETWEEN_PROMPTS:
         return False, "cooldown"
 
-    # Track how long they've been on the same topic
+    # ── Track topic duration ──
     if vlm.topic != state["last_topic"]:
-        # Topic changed — this is a natural transition
+        old_topic = state["last_topic"]
         state["same_content_since"] = now
         state["last_topic"] = vlm.topic
+        state["stuck_count"] = 0  # reset stuck counter on topic change
 
-        # If we had a previous topic, this transition is a good moment
-        if state["last_topic"]:
+        # ── 2a. Topic transition — good moment to prompt ──
+        if old_topic:
             return True, "topic_transition"
 
     seconds_on_topic = now - state["same_content_since"]
 
-    # Natural pause: been on same content for a while
-    if seconds_on_topic > NATURAL_PAUSE_THRESHOLD:
-        return True, "natural_pause"
-
-    # Student seems stuck (VLM detected)
-    if vlm.stuck:
-        return True, "stuck"
-
-    # Student said something (speech)
-    if vlm.speech_transcript:
-        return True, "speech"
-
-    # Mode changed (e.g., went from reading to solving)
+    # ── 2b. Mode changed (CONCEPTUAL → APPLIED, etc.) ──
     if vlm.mode and vlm.mode != state["last_mode"] and state["last_mode"]:
         state["last_mode"] = vlm.mode
         return True, "mode_change"
-
     state["last_mode"] = vlm.mode or state["last_mode"]
+
+    # ── 3. Natural pause: VLM detected a pause AND enough time on topic ──
+    # VLM sees: video paused, finished writing, scrolled to new section
+    vlm_says_pause = getattr(vlm, 'notes', '') and 'pause' in getattr(vlm, 'notes', '').lower()
+    # Also check the raw data for the natural_pause field from the JSON
+    raw_data = {}
+    try:
+        import json as _json
+        raw_data = _json.loads(vlm.raw_vlm_text) if vlm.raw_vlm_text else {}
+    except Exception:
+        pass
+    natural_pause_detected = raw_data.get("gemini_natural_pause", False) or vlm_says_pause
+
+    if natural_pause_detected and seconds_on_topic >= NATURAL_PAUSE_MIN_SECONDS:
+        return True, "natural_pause"
+
+    # ── 4. Stuck: sustained lack of progress ──
+    # Track consecutive "incomplete" or "incorrect" work_status observations
+    if vlm.work_status in ("incomplete", "incorrect"):
+        state["stuck_count"] = state.get("stuck_count", 0) + 1
+    elif vlm.work_status == "correct":
+        state["stuck_count"] = 0  # they made progress
+
+    stuck_by_vlm = vlm.stuck and seconds_on_topic >= STUCK_THRESHOLD_SECONDS
+    stuck_by_history = state.get("stuck_count", 0) >= STUCK_OBSERVATION_COUNT
+
+    if stuck_by_vlm or stuck_by_history:
+        return True, "stuck"
+
+    # ── 5. Fallback — don't go silent forever ──
+    if seconds_on_topic >= FALLBACK_PROMPT_SECONDS:
+        return True, "fallback"
+
     return False, "not_yet"
 
 
@@ -208,6 +240,7 @@ async def poll_context(ctx: Context):
                 vlm_context=vlm,
                 mastery=mastery,
                 mastery_quality=quality.get("quality", "no_data"),
+                trigger_reason=reason,
                 recent_observations=state["observations"][-5:],
                 session_id=f"session_{int(time.time())}",
             )

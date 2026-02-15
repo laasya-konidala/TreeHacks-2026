@@ -127,7 +127,7 @@ function createSidebar() {
 // ─── Claude Vision (screen analysis) ───────────────────────────────
 const SYSTEM_PROMPT = `You are an intelligent learning assistant observing a student's screen via periodic screenshots.
 
-Analyze each screenshot and output a concise JSON summary:
+Analyze each screenshot and output a JSON summary:
 {
   "activity": "what the student is doing right now",
   "topic": "subject/topic (e.g. eigenvalues, gradient_descent, photosynthesis)",
@@ -138,7 +138,7 @@ Analyze each screenshot and output a concise JSON summary:
   "content_type": "code | equation | text | diagram | video | mixed",
   "error_description": null or "specific error if work is incorrect",
   "natural_pause": true/false,
-  "notes": "transitions, notable details, what changed since last frame"
+  "screen_details": "VERY SPECIFIC description of what is visible on screen — read out exact text, equations, variable names, code snippets, question text, diagram labels, video titles, slide headings. Be as literal as possible so a tutor who cannot see the screen knows exactly what the student is looking at."
 }
 
 Modes (pick one based on what the student is DOING):
@@ -151,14 +151,22 @@ Timing cues — set natural_pause to true if:
 - They just finished writing something and stopped
 - They scrolled to a new section/page
 - There's a clear transition between activities
+- They seem to be idle / not actively typing or scrolling
+
+screen_details MUST include:
+- If there's a question/problem visible: quote the EXACT question text
+- If there's code: quote key lines, function names, variable names, errors
+- If there's an equation: write it out (e.g. "det(A - λI) = 0")
+- If there's a video: title, current slide/frame content, speaker's topic
+- If there's a textbook/article: heading, key paragraph content, highlighted text
+- If they wrote an answer: quote their EXACT answer so a tutor can check it
+- If there's an error message: quote it exactly
 
 Also consider:
 - Same content for multiple frames → deeply reading or stuck
 - Rapid content changes → skimming or switching tasks
-- If there's a transcript of what they said, incorporate it
-- Focus on WHAT CONCEPT they're working on and WHETHER THEIR WORK IS CORRECT
 
-Be concise. Only output the JSON, nothing else.`;
+Only output the JSON, nothing else.`;
 
 async function analyzeScreen(base64Image, speechTranscript) {
   if (!claude) return;
@@ -172,13 +180,10 @@ async function analyzeScreen(base64Image, speechTranscript) {
       promptText += contextBuffer.slice(-3).map((c, i) => `${i + 1}. ${c}`).join('\n');
     }
 
-    if (speechTranscript) {
-      promptText += `\n\nThe student just said: "${speechTranscript}"`;
-    }
-
+    // Speech transcript is NOT sent to VLM — it goes to the agent via the backend
     const response = await claude.messages.create({
       model: VLM_MODEL,
-      max_tokens: 300,
+      max_tokens: 400,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
@@ -270,7 +275,7 @@ function forwardToAgentBackend(vlmText, speechTranscript) {
       gemini_work_status: analysis.work_status || 'unclear',
       gemini_error: analysis.error_description || null,
       gemini_mode: analysis.mode || '',
-      gemini_notes: analysis.notes || '',
+      gemini_screen_details: analysis.screen_details || '',
       gemini_natural_pause: !!analysis.natural_pause,
 
       audio_transcript: speechTranscript || null,

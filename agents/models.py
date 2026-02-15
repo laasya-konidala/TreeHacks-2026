@@ -27,6 +27,7 @@ class AgentRequest(Model):
     vlm_context: VLMContext
     mastery: float = 0.0            # BKT mastery for the current topic (0-1)
     mastery_quality: str = "no_data"  # high | medium | low | no_data
+    trigger_reason: str = ""         # why now: natural_pause | topic_transition | stuck | mode_change | fallback
     recent_observations: list[str] = []  # last few VLM summaries for context
     session_id: str = ""
 
