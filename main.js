@@ -16,6 +16,7 @@ const VLM_MODEL = 'claude-haiku-4-5';  // cheap + fast for frequent VLM
 let sidebarWindow = null;
 let characterWindow = null;
 let sidebarVisible = false;
+let currentAvatar = 'plato'; // 'plato' | 'einstein' | 'darwin'
 let captureInterval = null;
 let sessionActive = false;
 let claude = null;       // Anthropic client
@@ -49,6 +50,10 @@ function createCharacter() {
   characterWindow.loadFile(path.join(__dirname, 'character.html'));
   characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   characterWindow.setIgnoreMouseEvents(false);
+
+  characterWindow.webContents.once('did-finish-load', () => {
+    characterWindow.webContents.send('avatar', currentAvatar);
+  });
 }
 
 // ─── Move both windows together (fixed relative position) ──────────
@@ -71,6 +76,17 @@ ipcMain.on('toggle-sidebar', () => {
     sidebarWindow.show();
   } else {
     sidebarWindow.hide();
+  }
+  if (characterWindow && !characterWindow.isDestroyed()) {
+    characterWindow.webContents.send('sidebar-visibility', sidebarVisible);
+  }
+});
+
+// ─── Avatar selection (from sidebar dropdown) ───────────────────────
+ipcMain.on('set-avatar', (_event, avatar) => {
+  currentAvatar = avatar;
+  if (characterWindow && !characterWindow.isDestroyed()) {
+    characterWindow.webContents.send('avatar', avatar);
   }
 });
 

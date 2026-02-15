@@ -28,45 +28,94 @@
   avatar.id = 'lc-avatar';
   avatar.title = 'Learning Companion';
 
-  const FRAME_COUNT = 51; // frames 00–50
+  const PLATO_FRAME_COUNT = 51; // frames 00–50
+  const PLATO2_FRAME_START = 28;
+  const PLATO2_FRAME_END = 101;
+  const PLATO2_FRAME_COUNT = PLATO2_FRAME_END - PLATO2_FRAME_START + 1; // 74 frames
+  const PLATO2_BASE = '20260214_1659_01khfcprk3f0r9hkg0knh35eqq_';
+  const DARWIN_FRAME_START = 0;
+  const DARWIN_FRAME_END = 86;
+  const DARWIN_FRAME_COUNT = DARWIN_FRAME_END - DARWIN_FRAME_START + 1;
+  const DARWIN_BASE = '20260214_2328_undefined_';
   const FRAME_RATE = 100; // ms per frame (~10 fps)
 
-  // Build array of frame URLs and preload them
-  const frameUrls = [];
-  const preloadedImages = [];
-  for (let i = 0; i < FRAME_COUNT; i++) {
+  // Build plato frame URLs (sidebar closed)
+  const platoFrameUrls = [];
+  for (let i = 0; i < PLATO_FRAME_COUNT; i++) {
     const padded = String(i).padStart(2, '0');
-    frameUrls.push(chrome.runtime.getURL(`assets/plato/frame_${padded}.svg`));
+    platoFrameUrls.push(chrome.runtime.getURL(`assets/plato/frame_${padded}.svg`));
+  }
+
+  // Build plato2 frame URLs (sidebar open / Einstein)
+  const plato2FrameUrls = [];
+  for (let i = PLATO2_FRAME_START; i <= PLATO2_FRAME_END; i++) {
+    const padded = String(i).padStart(3, '0');
+    plato2FrameUrls.push(chrome.runtime.getURL(`assets/plato2/${PLATO2_BASE}${padded}.svg`));
+  }
+
+  // Build darwin frame URLs
+  const darwinFrameUrls = [];
+  for (let i = DARWIN_FRAME_START; i <= DARWIN_FRAME_END; i++) {
+    const padded = String(i).padStart(3, '0');
+    darwinFrameUrls.push(chrome.runtime.getURL(`assets/darwin/${DARWIN_BASE}${padded}.svg`));
   }
 
   const avatarImg = document.createElement('img');
-  avatarImg.src = frameUrls[0];
+  avatarImg.src = platoFrameUrls[0];
   avatarImg.alt = 'Learning Companion';
   avatar.appendChild(avatarImg);
+
   document.body.appendChild(avatar);
 
   // Preload all frames to avoid flicker
-  frameUrls.forEach((url) => {
+  [...platoFrameUrls, ...plato2FrameUrls, ...darwinFrameUrls].forEach((url) => {
     const img = new Image();
     img.src = url;
-    preloadedImages.push(img);
   });
 
-  // Animate: cycle through frames in a loop
-  let currentFrame = 0;
-  setInterval(() => {
-    currentFrame = (currentFrame + 1) % FRAME_COUNT;
-    avatarImg.src = frameUrls[currentFrame];
-  }, FRAME_RATE);
-
-  // ---------- Toggle sidebar open/close ----------
+  // ---------- Toggle sidebar open/close (isOpen needed for animation) ----------
   let isOpen = false;
+  let currentAvatar = 'plato'; // 'plato' | 'einstein' | 'darwin'
+
+  function getCurrentAvatarSrc() {
+    if (currentAvatar === 'einstein') return plato2FrameUrls[currentPlato2Frame];
+    if (currentAvatar === 'darwin') return darwinFrameUrls[currentDarwinFrame];
+    return isOpen ? plato2FrameUrls[currentPlato2Frame] : platoFrameUrls[currentPlatoFrame];
+  }
+
+  // Animate: plato (plato/plato2 by sidebar), einstein (plato2), or darwin
+  let currentPlatoFrame = 0;
+  let currentPlato2Frame = 0;
+  let currentDarwinFrame = 0;
+  setInterval(() => {
+    if (currentAvatar === 'einstein') {
+      currentPlato2Frame = (currentPlato2Frame + 1) % PLATO2_FRAME_COUNT;
+      avatarImg.src = plato2FrameUrls[currentPlato2Frame];
+    } else if (currentAvatar === 'darwin') {
+      currentDarwinFrame = (currentDarwinFrame + 1) % DARWIN_FRAME_COUNT;
+      avatarImg.src = darwinFrameUrls[currentDarwinFrame];
+    } else if (isOpen) {
+      currentPlato2Frame = (currentPlato2Frame + 1) % PLATO2_FRAME_COUNT;
+      avatarImg.src = plato2FrameUrls[currentPlato2Frame];
+    } else {
+      currentPlatoFrame = (currentPlatoFrame + 1) % PLATO_FRAME_COUNT;
+      avatarImg.src = platoFrameUrls[currentPlatoFrame];
+    }
+  }, FRAME_RATE);
 
   function toggleSidebar() {
     isOpen = !isOpen;
     sidebar.classList.toggle('lc-open', isOpen);
     overlay.classList.toggle('lc-visible', isOpen);
     avatar.classList.toggle('lc-active', isOpen);
+    avatarImg.src = getCurrentAvatarSrc();
+  }
+
+  function setAvatar(av) {
+    currentAvatar = av;
+    avatarImg.src = getCurrentAvatarSrc();
+    avatar.classList.toggle('lc-einstein', currentAvatar === 'einstein');
+    avatar.classList.toggle('lc-darwin', currentAvatar === 'darwin');
   }
 
   avatar.addEventListener('click', toggleSidebar);
@@ -79,6 +128,8 @@
 
     if (msg.type === 'lc-close-sidebar') {
       if (isOpen) toggleSidebar();
+    } else if (msg.type === 'lc-set-avatar') {
+      setAvatar(msg.avatar || 'plato');
     } else if (msg.type === 'toggle-session' || msg.type === 'speech-transcript') {
       // Forward to background service worker
       chrome.runtime.sendMessage(msg);

@@ -234,10 +234,47 @@
     }
 
     .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* ── Avatar dropdown ── */
+    .avatar-row {
+      padding: 10px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar-label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .avatar-select {
+      flex: 1;
+      max-width: 140px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .avatar-select:focus {
+      outline: none;
+      border-color: rgba(16, 185, 129, 0.5);
+    }
   </style>
 </head>
 <body>
   <div class="panel">
+    <div class="avatar-row">
+      <label for="avatarSelect" class="avatar-label">Avatar</label>
+      <select id="avatarSelect" class="avatar-select" title="Choose avatar">
+        <option value="plato">Plato</option>
+        <option value="einstein">Einstein</option>
+        <option value="darwin">Darwin</option>
+      </select>
+    </div>
     <div class="header">
       <div class="header-left">
         <div class="agent-icon idle" id="agentIcon">&#x1F441;&#xFE0F;</div>
@@ -430,6 +467,10 @@
     // ── Close button ──
     document.getElementById('btnClose').addEventListener('click', () => {
       sendToParent('lc-close-sidebar', {});
+    });
+
+    document.getElementById('avatarSelect').addEventListener('change', (e) => {
+      sendToParent('lc-set-avatar', { avatar: e.target.value });
     });
 
     // ── Agent display ──
