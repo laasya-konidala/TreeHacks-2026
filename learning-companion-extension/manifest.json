@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Learning Companion",
+  "version": "1.0.0",
+  "description": "A floating learning companion that helps students understand any webpage with AI-powered chat.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "css": ["src/avatar.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/sidebar.html", "assets/avatar.svg", "assets/plato/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "48": "assets/avatar.svg",
+    "128": "assets/avatar.svg"
+  }
+}
