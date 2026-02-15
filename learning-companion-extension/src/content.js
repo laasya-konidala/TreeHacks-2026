@@ -33,10 +33,6 @@
   const PLATO2_FRAME_END = 101;
   const PLATO2_FRAME_COUNT = PLATO2_FRAME_END - PLATO2_FRAME_START + 1; // 74 frames
   const PLATO2_BASE = '20260214_1659_01khfcprk3f0r9hkg0knh35eqq_';
-  const DARWIN_FRAME_START = 0;
-  const DARWIN_FRAME_END = 86;
-  const DARWIN_FRAME_COUNT = DARWIN_FRAME_END - DARWIN_FRAME_START + 1;
-  const DARWIN_BASE = '20260214_2328_undefined_';
   const FRAME_RATE = 100; // ms per frame (~10 fps)
 
   // Build plato frame URLs (sidebar closed)
@@ -46,18 +42,11 @@
     platoFrameUrls.push(chrome.runtime.getURL(`assets/plato/frame_${padded}.svg`));
   }
 
-  // Build plato2 frame URLs (sidebar open / Einstein)
+  // Build plato2 frame URLs (sidebar open)
   const plato2FrameUrls = [];
   for (let i = PLATO2_FRAME_START; i <= PLATO2_FRAME_END; i++) {
     const padded = String(i).padStart(3, '0');
     plato2FrameUrls.push(chrome.runtime.getURL(`assets/plato2/${PLATO2_BASE}${padded}.svg`));
-  }
-
-  // Build darwin frame URLs
-  const darwinFrameUrls = [];
-  for (let i = DARWIN_FRAME_START; i <= DARWIN_FRAME_END; i++) {
-    const padded = String(i).padStart(3, '0');
-    darwinFrameUrls.push(chrome.runtime.getURL(`assets/darwin/${DARWIN_BASE}${padded}.svg`));
   }
 
   const avatarImg = document.createElement('img');
@@ -68,32 +57,27 @@
   document.body.appendChild(avatar);
 
   // Preload all frames to avoid flicker
-  [...platoFrameUrls, ...plato2FrameUrls, ...darwinFrameUrls].forEach((url) => {
+  [...platoFrameUrls, ...plato2FrameUrls].forEach((url) => {
     const img = new Image();
     img.src = url;
   });
 
   // ---------- Toggle sidebar open/close (isOpen needed for animation) ----------
   let isOpen = false;
-  let currentAvatar = 'plato'; // 'plato' | 'einstein' | 'darwin'
+  let currentAvatar = 'plato'; // 'plato' | 'einstein'
 
   function getCurrentAvatarSrc() {
     if (currentAvatar === 'einstein') return plato2FrameUrls[currentPlato2Frame];
-    if (currentAvatar === 'darwin') return darwinFrameUrls[currentDarwinFrame];
     return isOpen ? plato2FrameUrls[currentPlato2Frame] : platoFrameUrls[currentPlatoFrame];
   }
 
-  // Animate: plato (plato/plato2 by sidebar), einstein (plato2), or darwin
+  // Animate: plato or einstein (plato2 frames)
   let currentPlatoFrame = 0;
   let currentPlato2Frame = 0;
-  let currentDarwinFrame = 0;
   setInterval(() => {
     if (currentAvatar === 'einstein') {
       currentPlato2Frame = (currentPlato2Frame + 1) % PLATO2_FRAME_COUNT;
       avatarImg.src = plato2FrameUrls[currentPlato2Frame];
-    } else if (currentAvatar === 'darwin') {
-      currentDarwinFrame = (currentDarwinFrame + 1) % DARWIN_FRAME_COUNT;
-      avatarImg.src = darwinFrameUrls[currentDarwinFrame];
     } else if (isOpen) {
       currentPlato2Frame = (currentPlato2Frame + 1) % PLATO2_FRAME_COUNT;
       avatarImg.src = plato2FrameUrls[currentPlato2Frame];
@@ -115,7 +99,6 @@
     currentAvatar = av;
     avatarImg.src = getCurrentAvatarSrc();
     avatar.classList.toggle('lc-einstein', currentAvatar === 'einstein');
-    avatar.classList.toggle('lc-darwin', currentAvatar === 'darwin');
   }
 
   avatar.addEventListener('click', toggleSidebar);

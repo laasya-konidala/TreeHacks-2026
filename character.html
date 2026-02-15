@@ -20,20 +20,17 @@
       justify-content: center;
       position: relative;
       cursor: pointer;
-      background: rgba(255, 255, 255, 0.75);
+      background: rgba(255, 255, 255, 0.35);
       border-radius: 50%;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
     }
 
     .avatar-container img {
-      width: 100px;
+      width: 80px;
       height: auto;
       pointer-events: none;
-      filter: drop-shadow(0 2px 8px rgba(33, 138, 87, 0.3));
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
       transition: transform 0.15s ease;
-    }
-
-    .avatar-container.avatar-darwin img {
-      width: 68px;
     }
 
     .avatar-container:active img {
@@ -45,8 +42,8 @@
       position: absolute;
       width: 80px;
       height: 80px;
-      border-radius: 80%;
-      border: 2px solid rgba(76, 175, 80, 0.6);
+      border-radius: 50%;
+      border: 2px solid rgba(51, 111, 58, 0.2);
       animation: pulse 2s ease-out infinite;
       pointer-events: none;
     }
@@ -71,76 +68,28 @@
     const avatarImg = document.getElementById('avatarImg');
     const pulseRing = document.getElementById('pulseRing');
 
-    const PLATO_FRAME_COUNT = 51;
-    const PLATO2_FRAME_START = 28;
-    const PLATO2_FRAME_END = 101;
-    const PLATO2_FRAME_COUNT = PLATO2_FRAME_END - PLATO2_FRAME_START + 1;
-    const PLATO2_BASE = '20260214_1659_01khfcprk3f0r9hkg0knh35eqq_';
-    const DARWIN_FRAME_START = 0;
-    const DARWIN_FRAME_END = 86;
-    const DARWIN_FRAME_COUNT = DARWIN_FRAME_END - DARWIN_FRAME_START + 1;
-    const DARWIN_BASE = '20260214_2328_undefined_';
+    const FRAME_COUNT = 51;
     const FRAME_RATE = 100;
-    const basePath = 'learning-companion-extension/assets';
 
-    // Build plato frame paths
-    const platoFramePaths = [];
-    for (let i = 0; i < PLATO_FRAME_COUNT; i++) {
+    // Build frame paths
+    const framePaths = [];
+    for (let i = 0; i < FRAME_COUNT; i++) {
       const padded = String(i).padStart(2, '0');
-      platoFramePaths.push(`${basePath}/plato/frame_${padded}.svg`);
+      framePaths.push(`learning-companion-extension/assets/plato/frame_${padded}.svg`);
     }
 
-    // Build plato2 frame paths (used for Einstein)
-    const plato2FramePaths = [];
-    for (let i = PLATO2_FRAME_START; i <= PLATO2_FRAME_END; i++) {
-      const padded = String(i).padStart(3, '0');
-      plato2FramePaths.push(`${basePath}/plato2/${PLATO2_BASE}${padded}.svg`);
-    }
+    // Preload
+    framePaths.forEach(p => { const img = new Image(); img.src = p; });
 
-    // Build darwin frame paths
-    const darwinFramePaths = [];
-    for (let i = DARWIN_FRAME_START; i <= DARWIN_FRAME_END; i++) {
-      const padded = String(i).padStart(3, '0');
-      darwinFramePaths.push(`${basePath}/darwin/${DARWIN_BASE}${padded}.svg`);
-    }
-
-    // Preload all frames
-    [...platoFramePaths, ...plato2FramePaths, ...darwinFramePaths].forEach(p => { const img = new Image(); img.src = p; });
-
-    let currentAvatar = 'plato'; // 'plato' | 'einstein' | 'darwin'
-    avatarImg.src = platoFramePaths[0];
+    // Set initial frame
+    avatarImg.src = framePaths[0];
 
     // Animate
-    let currentPlatoFrame = 0;
-    let currentPlato2Frame = 0;
-    let currentDarwinFrame = 0;
+    let currentFrame = 0;
     setInterval(() => {
-      if (currentAvatar === 'einstein') {
-        currentPlato2Frame = (currentPlato2Frame + 1) % PLATO2_FRAME_COUNT;
-        avatarImg.src = plato2FramePaths[currentPlato2Frame];
-      } else if (currentAvatar === 'darwin') {
-        currentDarwinFrame = (currentDarwinFrame + 1) % DARWIN_FRAME_COUNT;
-        avatarImg.src = darwinFramePaths[currentDarwinFrame];
-      } else {
-        currentPlatoFrame = (currentPlatoFrame + 1) % PLATO_FRAME_COUNT;
-        avatarImg.src = platoFramePaths[currentPlatoFrame];
-      }
+      currentFrame = (currentFrame + 1) % FRAME_COUNT;
+      avatarImg.src = framePaths[currentFrame];
     }, FRAME_RATE);
-
-    function getCurrentSrc() {
-      if (currentAvatar === 'einstein') return plato2FramePaths[currentPlato2Frame];
-      if (currentAvatar === 'darwin') return darwinFramePaths[currentDarwinFrame];
-      return platoFramePaths[currentPlatoFrame];
-    }
-
-    window.api.onAvatar((avatar) => {
-      currentAvatar = avatar;
-      avatarImg.src = getCurrentSrc();
-      avatarContainer.classList.toggle('avatar-darwin', currentAvatar === 'darwin');
-      if (currentAvatar === 'einstein') pulseRing.style.borderColor = 'rgba(156, 39, 176, 0.6)';
-      else if (currentAvatar === 'darwin') pulseRing.style.borderColor = 'rgba(33, 138, 87, 0.6)';
-      else pulseRing.style.borderColor = '';
-    });
 
     // ── Drag + Click detection ──
     // We handle window dragging manually so clicks still work.

@@ -21,7 +21,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/sidebar.html", "assets/avatar.svg", "assets/plato/*","assets/plato2/*","assets/einstein/*","assets/darwin/*"],
+      "resources": ["src/sidebar.html", "assets/avatar.svg", "assets/plato/*","assets/plato2/*","assets/einstein/*"],
       "matches": ["<all_urls>"]
     }
   ],
