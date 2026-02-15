@@ -81,12 +81,14 @@ state = {
 }
 
 # ─── Config ───
-MIN_SECONDS_BETWEEN_PROMPTS = 45    # hard cooldown — never prompt faster than this
-NATURAL_PAUSE_MIN_SECONDS = 25      # need at least 25s on topic before natural_pause triggers
-STUCK_THRESHOLD_SECONDS = 60        # 60s on same topic + VLM says stuck → stuck trigger
-FALLBACK_PROMPT_SECONDS = 180       # 3 min — safety net so system doesn't go completely silent
+# ⚠️ TESTING VALUES — raise these back for production
+MIN_SECONDS_BETWEEN_PROMPTS = 15    # hard cooldown (prod: 45)
+NATURAL_PAUSE_MIN_SECONDS = 10      # time on topic before pause triggers (prod: 25)
+STUCK_THRESHOLD_SECONDS = 30        # stuck timer (prod: 60)
+FALLBACK_PROMPT_SECONDS = 40        # safety net (prod: 180)
 MAX_OBSERVATIONS = 20
 STUCK_OBSERVATION_COUNT = 5         # how many "incomplete" work_status in a row = stuck
+_poll_count = 0                     # debug counter for VLM observations
 
 
 def _resolve_agent_addresses():
@@ -197,6 +199,7 @@ def pick_agent(vlm: VLMContext) -> str:
 @orchestrator.on_interval(period=8.0)
 async def poll_context(ctx: Context):
     """Poll the FastAPI backend for the latest VLM screen analysis."""
+    global _poll_count
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(f"{BACKEND_URL}/context/latest")
@@ -204,8 +207,13 @@ async def poll_context(ctx: Context):
                 return
 
             data = resp.json()
-            if not data or not data.get("detected_topic"):
+            if not data:
+                return  # empty — no VLM data posted yet
+            if not data.get("detected_topic"):
+                logger.info(f"  [poll] Got data but no detected_topic. Keys: {list(data.keys())[:8]}")
                 return
+
+            _poll_count += 1
 
             # Build VLMContext from the backend data
             vlm = VLMContext(
@@ -221,6 +229,30 @@ async def poll_context(ctx: Context):
                 speech_transcript=data.get("audio_transcript"),
                 raw_vlm_text=json.dumps(data, default=str),
             )
+
+            # ─── DEBUG: VLM observation (detailed every 3rd, compact otherwise) ───
+            now = time.time()
+            secs_on_topic = now - state["same_content_since"] if state["same_content_since"] else 0
+            cooldown_left = max(0, MIN_SECONDS_BETWEEN_PROMPTS - (now - state["last_prompt_time"]))
+            screen_details = data.get("gemini_screen_details", "")[:100]
+
+            if _poll_count % 3 == 0:
+                logger.info(
+                    f"\n{'─' * 60}\n"
+                    f"  👁️  VLM #{_poll_count}\n"
+                    f"  Topic:    {vlm.topic} ({vlm.subtopic})\n"
+                    f"  Mode:     {vlm.mode}  |  Status: {vlm.work_status}  |  Stuck: {vlm.stuck}\n"
+                    f"  Screen:   {screen_details}...\n"
+                    f"  Timing:   {secs_on_topic:.0f}s on topic  |  cooldown: {cooldown_left:.0f}s left\n"
+                    f"  Mastery:  {bkt.get_mastery(vlm.topic):.0%} ({vlm.topic})\n"
+                    f"  Stuck#:   {state.get('stuck_count', 0)}/{STUCK_OBSERVATION_COUNT}\n"
+                    f"{'─' * 60}"
+                )
+            else:
+                logger.info(
+                    f"  👁️ #{_poll_count}  {vlm.mode} | {vlm.topic} | {vlm.work_status} | "
+                    f"{secs_on_topic:.0f}s on topic | cd:{cooldown_left:.0f}s"
+                )
 
             # Add to observation buffer
             obs_summary = f"{vlm.activity} — {vlm.topic} ({vlm.mode})"
@@ -241,9 +273,8 @@ async def poll_context(ctx: Context):
             # Should we prompt now?
             should, reason = should_prompt_now(vlm)
             if not should:
+                logger.info(f"      ⏳ Not prompting — reason: {reason}")
                 return
-
-            logger.info(f"[Orchestrator] Prompting — reason: {reason}, topic: {vlm.topic}")
 
             # Pick the agent
             agent_name = pick_agent(vlm)
@@ -255,6 +286,17 @@ async def poll_context(ctx: Context):
             # Build the request
             mastery = bkt.get_mastery(vlm.topic) if vlm.topic else 0.0
             quality = bkt.get_observation_quality(vlm.topic) if vlm.topic else {}
+
+            # ─── DEBUG: Prompt triggered! ───
+            logger.info(
+                f"\n{'═' * 60}\n"
+                f"  🚀 PROMPT TRIGGERED!\n"
+                f"  Reason:  {reason}\n"
+                f"  Agent:   {agent_name} (mode: {vlm.mode})\n"
+                f"  Topic:   {vlm.topic} | Mastery: {mastery:.0%}\n"
+                f"  Screen:  {screen_details}...\n"
+                f"{'═' * 60}"
+            )
 
             request = AgentRequest(
                 vlm_context=vlm,
@@ -271,7 +313,7 @@ async def poll_context(ctx: Context):
             state["prompt_count"] += 1
             state["same_content_since"] = time.time()  # reset timer
 
-            logger.info(f"[Orchestrator] Sent to {agent_name} (prompt #{state['prompt_count']})")
+            logger.info(f"  📤 Sent to {agent_name} (prompt #{state['prompt_count']})")
 
     except httpx.ConnectError:
         pass  # backend not running yet, that's fine
@@ -283,20 +325,35 @@ async def poll_context(ctx: Context):
 @orchestrator.on_message(model=AgentResponse)
 async def handle_agent_response(ctx: Context, sender: str, msg: AgentResponse):
     """Forward agent response to the sidebar via the FastAPI backend."""
-    logger.info(f"[Orchestrator] Got response from {msg.agent_type}: {msg.content[:80]}")
+    viz_tier = (msg.metadata or {}).get("tier", "—") if msg.metadata else "—"
+    logger.info(
+        f"\n{'═' * 60}\n"
+        f"  📥 AGENT RESPONSE RECEIVED\n"
+        f"  From:     {msg.agent_type}\n"
+        f"  Tool:     {msg.tool_used}  |  Type: {msg.content_type}\n"
+        f"  Viz tier: {viz_tier}\n"
+        f"  Content:  {msg.content[:120]}...\n"
+        f"  → Forwarding to sidebar via WebSocket\n"
+        f"{'═' * 60}"
+    )
 
     # Forward to the FastAPI backend which sends it to the sidebar via WebSocket
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        payload = {
+            "agent_type": msg.agent_type,
+            "content": msg.content,
+            "content_type": msg.content_type,
+            "tool_used": msg.tool_used,
+            "topic": msg.topic,
+            "mastery": msg.mastery,
+        }
+        if msg.metadata:
+            payload["metadata"] = msg.metadata
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(
                 f"{BACKEND_URL}/agent-response",
-                json={
-                    "agent_type": msg.agent_type,
-                    "content": msg.content,
-                    "tool_used": msg.tool_used,
-                    "topic": msg.topic,
-                    "mastery": msg.mastery,
-                },
+                json=payload,
             )
     except Exception as e:
         logger.error(f"[Orchestrator] Failed to forward response: {e}")

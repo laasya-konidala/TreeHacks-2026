@@ -3,6 +3,11 @@ Configuration for the Ambient Learning Agent System.
 Seeds, API keys, thresholds, and agent addresses.
 """
 import os
+from pathlib import Path
+
+# Load .env from project root
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # ─── Agent Seeds (deterministic addresses) ───
 ORCHESTRATOR_SEED = "ambient_learning_orchestrator_seed_2026"

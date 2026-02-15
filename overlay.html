@@ -284,6 +284,7 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -404,8 +405,11 @@
     });
 
     // ── IPC listeners ──
-    window.api.onStartMic(() => startSpeechRecognition());
-    window.api.onStopMic(() => stopSpeechRecognition());
+    // ⚠️ TEMPORARY: Speech recognition disabled — causes chunked_data_pipe spam in Electron
+    // window.api.onStartMic(() => startSpeechRecognition());
+    // window.api.onStopMic(() => stopSpeechRecognition());
+    window.api.onStartMic(() => console.log('[Speech] Disabled for testing'));
+    window.api.onStopMic(() => console.log('[Speech] Disabled for testing'));
 
     // ── Visualization rendering ──
     const BACKEND_ORIGIN = 'http://localhost:8080';
@@ -443,17 +447,19 @@
         return;
       }
 
-      // D3 (sandboxed iframe)
+      // D3 (unsandboxed iframe so it can load D3 from CDN)
       if (tier === 'd3' && payload.code) {
         var code = payload.code.replace(/<\/script/gi, '<\\/script');
-        var html = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-          '<script src="https://d3js.org/d3.v7.min.js"><\\/script>' +
-          '<style>body{margin:0;background:transparent;}</style></head>' +
-          '<body><div id="v"></div><script>' + code +
-          '; if (typeof draw === "function") draw(document.getElementById("v"));<\\/script></body></html>';
+        var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+          + '<script src="https://d3js.org/d3.v7.min.js"><\/script>'
+          + '<style>body{margin:0;background:transparent;overflow:hidden;color:#e5e7eb;font-family:sans-serif;}'
+          + 'svg text{fill:#e5e7eb;} svg line,svg path{stroke:#e5e7eb;}</style></head>'
+          + '<body><div id="v" style="width:100%;height:100%;"></div>'
+          + '<script>window.onerror=function(m){document.getElementById("v").innerHTML="<p style=color:#ef4444;font-size:12px>"+m+"</p>"};'
+          + code
+          + '; if(typeof draw==="function") draw(document.getElementById("v"));<\/script></body></html>';
         var iframe = document.createElement('iframe');
-        iframe.setAttribute('sandbox', 'allow-scripts');
-        iframe.style.cssText = 'width:100%;height:200px;border:0;border-radius:8px;';
+        iframe.style.cssText = 'width:100%;height:220px;border:0;border-radius:8px;background:rgba(0,0,0,0.15);';
         iframe.srcdoc = html;
         canvasEl.innerHTML = '';
         canvasEl.appendChild(iframe);

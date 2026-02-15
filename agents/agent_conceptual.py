@@ -183,35 +183,42 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         topic,
     )
 
-    logger.info(f"[Conceptual] Request — topic: {topic}, mastery: {mastery_pct}%, trigger: {trigger_reason}")
-    logger.info(f"[Conceptual] Screen: {screen_details[:120]}")
+    logger.info(
+        f"\n{'━' * 60}\n"
+        f"  🧐 CONCEPTUAL AGENT — Request received\n"
+        f"  Topic:   {topic} | Mastery: {mastery_pct}% ({mastery_quality})\n"
+        f"  Trigger: {trigger_reason}\n"
+        f"  Screen:  {screen_details[:150]}\n"
+        f"{'━' * 60}"
+    )
 
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
     # Step 1: Pick the best tool
-    tool = "voice_call"  # default
-    try:
-        tool_user_msg = TOOL_SELECTION_USER.format(
-            screen_details=screen_details,
-            topic=topic,
-            mastery=mastery_pct,
-            mastery_quality=mastery_quality,
-            trigger_reason=trigger_reason,
-            recent_observations=recent_obs,
-        )
-
-        tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
-
-        if '"visualization"' in tool_text:
-            tool = "visualization"
-        else:
-            tool = "voice_call"
-
-        logger.info(f"[Conceptual] Selected tool: {tool}")
-
-    except Exception as e:
-        logger.warning(f"[Conceptual] Tool selection failed, defaulting to voice_call: {e}")
-        tool = "voice_call"
+    # ⚠️ TEMPORARY: hardcoded to visualization for end-to-end testing
+    tool = "visualization"
+    logger.info("  🔀 Step 1: Tool HARDCODED to visualization (testing mode)")
+    # TODO: restore LLM tool selection after visualization pipeline is verified
+    # logger.info("  🔀 Step 1: Picking tool (LLM call 1)...")
+    # tool = "voice_call"  # default
+    # try:
+    #     tool_user_msg = TOOL_SELECTION_USER.format(
+    #         screen_details=screen_details,
+    #         topic=topic,
+    #         mastery=mastery_pct,
+    #         mastery_quality=mastery_quality,
+    #         trigger_reason=trigger_reason,
+    #         recent_observations=recent_obs,
+    #     )
+    #     tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
+    #     if '"visualization"' in tool_text:
+    #         tool = "visualization"
+    #     else:
+    #         tool = "voice_call"
+    #     logger.info(f"  🔀 Tool selected: {tool}  (Claude said: {tool_text[:80]})")
+    # except Exception as e:
+    #     logger.warning(f"  ⚠️ Tool selection failed, defaulting to voice_call: {e}")
+    #     tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
     content_type = "text"
@@ -219,6 +226,7 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
 
     if tool == "visualization":
         # ── Full visualization pipeline via tool_visualization.py ──
+        logger.info("  🎨 Step 2: Generating visualization (LLM call 2)...")
         try:
             from agents.tools.tool_visualization import generate_visualization
 
@@ -231,6 +239,7 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
             framing = mode_to_framing.get(
                 (msg.vlm_context.mode or "").upper(), "conceptual"
             )
+            logger.info(f"  🎨 Framing: {framing} (from VLM mode: {msg.vlm_context.mode})")
 
             viz_result = generate_visualization(
                 concept=topic,
@@ -246,15 +255,35 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
             content = viz_result.get("content", "")
             content_type = viz_result.get("content_type", "visualization")
             metadata = viz_result.get("metadata")
-            logger.info(f"[Conceptual] Visualization generated — tier: {(metadata or {}).get('tier', '?')}")
+            tier = (metadata or {}).get("tier", "?")
+            viz_obj = (metadata or {}).get("visualization") or {}
+            viz_title = viz_obj.get("title", "?")
+            logger.info(f"  🎨 Visualization generated — tier: {tier}, title: {viz_title}")
+
+            # ── Debug: print full visualization payload ──
+            viz_code = viz_obj.get("code") or viz_obj.get("content") or ""
+            logger.info(f"\n{'─' * 60}")
+            logger.info(f"  🎨 FULL VISUALIZATION OUTPUT")
+            logger.info(f"  Tier: {tier} | Title: {viz_title}")
+            logger.info(f"  Narration: {viz_obj.get('narration', '')}")
+            if tier == "d3":
+                logger.info(f"  D3 Code:\n{viz_code}")
+            elif tier == "latex":
+                logger.info(f"  LaTeX: {viz_code}")
+            elif tier == "plotly":
+                logger.info(f"  Plotly figure: {json.dumps(viz_obj.get('plotly_figure', {}), indent=2)[:500]}")
+            elif tier == "manim":
+                logger.info(f"  Manim Code:\n{viz_code}")
+            logger.info(f"{'─' * 60}")
 
         except Exception as e:
-            logger.error(f"[Conceptual] Visualization generation failed: {e}")
+            logger.error(f"  ❌ Visualization generation failed: {e}")
             content = "I wanted to show you a visualization, but ran into an issue. Keep going!"
             content_type = "text"
             metadata = None
     else:
         # ── voice_call or other text-based tools ──
+        logger.info(f"  🗣️ Step 2: Generating {tool} content (LLM call 2)...")
         try:
             system_prompt, user_template = TOOL_PROMPTS[tool]
             exercise_user_msg = user_template.format(
@@ -265,10 +294,10 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
             )
 
             content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
-            logger.info(f"[Conceptual] Generated: {content[:100]}")
+            logger.info(f"  🗣️ Generated: {content[:120]}")
 
         except Exception as e:
-            logger.error(f"[Conceptual] Exercise generation failed: {e}")
+            logger.error(f"  ❌ Exercise generation failed: {e}")
             content = "Hmm, I wanted to ask you something about what you're reading, but I ran into an issue. Keep going!"
 
     # Step 3: Send response back to orchestrator
@@ -283,4 +312,8 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     )
 
     await ctx.send(sender, response)
-    logger.info(f"[Conceptual] Response sent — tool: {tool}, content_type: {content_type}, trigger: {trigger_reason}")
+    logger.info(
+        f"  📤 Response sent → orchestrator\n"
+        f"     tool: {tool} | content_type: {content_type} | trigger: {trigger_reason}\n"
+        f"{'━' * 60}"
+    )

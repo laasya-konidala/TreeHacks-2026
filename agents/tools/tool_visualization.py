@@ -163,28 +163,54 @@ Choose latex, d3, plotly, or manim and return ONLY the JSON object (no markdown,
 
 def _parse_json_from_response(text: str) -> Optional[dict]:
     """Extract a JSON object from Claude's response (may be inside markdown code block)."""
-    text = (text or "").strip()
-    # Strip markdown code block if present
-    if "```" in text:
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            text = match.group(1).strip()
-    # Find first { ... }
-    start = text.find("{")
+    raw = (text or "").strip()
+
+    # ── Strategy 1: strip markdown fences with GREEDY match (last ```) ──
+    stripped = raw
+    fence_match = re.search(r"```(?:json)?\s*([\s\S]*)```\s*$", raw)
+    if fence_match:
+        stripped = fence_match.group(1).strip()
+    elif raw.startswith("```"):
+        # Truncated code block — no closing ```. Just strip the opening.
+        stripped = re.sub(r"^```(?:json)?\s*", "", raw).strip()
+
+    # ── Strategy 2: try direct json.loads on stripped text ──
+    try:
+        result = json.loads(stripped)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError as e:
+        logger.debug(f"[parser] Direct parse failed: {e}")
+
+    # ── Strategy 3: find first { and try each } from the END backwards ──
+    start = stripped.find("{")
     if start == -1:
         return None
-    depth = 0
-    for i in range(start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[start : i + 1])
-                except json.JSONDecodeError:
-                    pass
-                break
+
+    for end in range(len(stripped) - 1, start, -1):
+        if stripped[end] == "}":
+            try:
+                result = json.loads(stripped[start : end + 1])
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                continue
+
+    # ── Strategy 4: same but on the raw text (in case fence stripping went wrong) ──
+    start = raw.find("{")
+    if start == -1:
+        return None
+
+    for end in range(len(raw) - 1, start, -1):
+        if raw[end] == "}":
+            try:
+                result = json.loads(raw[start : end + 1])
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                continue
+
+    logger.warning(f"[parser] All strategies failed. Text length: {len(raw)}, first 200: {raw[:200]}")
     return None
 
 
@@ -219,11 +245,15 @@ def generate_visualization(
     try:
         response = _get_client().messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=2048,
+            max_tokens=8192,
             system=VISUALIZATION_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
         )
         text = response.content[0].text if response.content else ""
+        stop_reason = response.stop_reason
+        logger.info(f"[tool_visualization] Claude response: {len(text)} chars, stop_reason={stop_reason}")
+        if stop_reason == "max_tokens":
+            logger.warning("[tool_visualization] Response was TRUNCATED by max_tokens!")
     except Exception as e:
         logger.error(f"[tool_visualization] Claude API error: {e}")
         return _fallback_ui_payload("latex", concept, session_id, error=str(e))
@@ -231,6 +261,7 @@ def generate_visualization(
     parsed = _parse_json_from_response(text)
     if not parsed or "tier" not in parsed:
         logger.warning("[tool_visualization] Could not parse JSON from Claude; using fallback")
+        logger.warning(f"[tool_visualization] Raw Claude response:\n{text[:500]}")
         return _fallback_ui_payload("latex", concept, session_id)
 
     tier = (parsed.get("tier") or "latex").lower()
@@ -239,6 +270,22 @@ def generate_visualization(
 
     title = parsed.get("title") or f"Visualizing {concept or 'concept'}"
     narration = parsed.get("narration") or ""
+
+    # ── Debug: log the full visualization payload from Claude ──
+    logger.info(f"\n{'─' * 60}")
+    logger.info(f"  🎨 VISUALIZATION OUTPUT from Claude")
+    logger.info(f"  Tier: {tier} | Title: {title}")
+    logger.info(f"  Narration: {narration}")
+    if tier == "d3":
+        logger.info(f"  D3 Code:\n{parsed.get('code', '(no code)')}")
+    elif tier == "latex":
+        logger.info(f"  LaTeX: {parsed.get('content', '(no content)')}")
+    elif tier == "plotly":
+        import json as _json
+        logger.info(f"  Plotly figure: {_json.dumps(parsed.get('figure', {}), indent=2)[:500]}")
+    elif tier == "manim":
+        logger.info(f"  Manim Code:\n{parsed.get('code', '(no code)')}")
+    logger.info(f"{'─' * 60}")
 
     # Build UI payload: same shape the overlay expects (metadata.tier, metadata.visualization)
     visualization: dict[str, Any] = {

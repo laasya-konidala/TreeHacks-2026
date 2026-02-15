@@ -113,6 +113,8 @@ def _merge_context() -> dict:
         "gemini_error": gemini.get("gemini_error"),
         "gemini_mode": gemini.get("gemini_mode", ""),
         "gemini_notes": gemini.get("gemini_notes", ""),
+        "gemini_screen_details": gemini.get("gemini_screen_details", ""),
+        "gemini_natural_pause": gemini.get("gemini_natural_pause", False),
     }
 
     return merged
@@ -141,6 +143,10 @@ async def receive_context(ctx: dict):
     # Merge both sources into the unified context
     latest_context["data"] = _merge_context()
     latest_context["timestamp"] = time.time()
+
+    topic = latest_context["data"].get("detected_topic", "?")
+    mode = latest_context["data"].get("gemini_mode", "?")
+    logger.info(f"[Context] Received from {source or 'gemini'} — topic: {topic}, mode: {mode}")
 
     return {"status": "ok", "source": source or "gemini"}
 

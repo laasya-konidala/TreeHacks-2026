@@ -1,4 +1,6 @@
 const path = require('path');
+const http = require('http');
+const url = require('url');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { app, BrowserWindow, screen, desktopCapturer, ipcMain, systemPreferences } = require('electron');
 const WebSocket = require('ws');
@@ -11,6 +13,7 @@ const CAPTURE_INTERVAL_MS = 8000;   // 8s — balances cost vs responsiveness
 const CAPTURE_WIDTH = 1280;
 const CAPTURE_HEIGHT = 720;
 const VLM_MODEL = 'claude-haiku-4-5';  // cheap + fast for frequent VLM
+const VLM_MAX_TOKENS = 800;            // enough for full JSON with screen_details
 
 // ─── State ─────────────────────────────────────────────────────────
 let sidebarWindow = null;
@@ -183,7 +186,7 @@ async function analyzeScreen(base64Image, speechTranscript) {
     // Speech transcript is NOT sent to VLM — it goes to the agent via the backend
     const response = await claude.messages.create({
       model: VLM_MODEL,
-      max_tokens: 400,
+      max_tokens: VLM_MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
@@ -285,11 +288,24 @@ function forwardToAgentBackend(vlmText, speechTranscript) {
       timestamp: new Date().toISOString(),
     };
 
-    fetch(`${BACKEND_URL}/context`, {
+    const postData = JSON.stringify(ctx);
+    const parsed = url.parse(`${BACKEND_URL}/context`);
+    const req = http.request({
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: parsed.path,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ctx),
-    }).catch(() => {});
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, (res) => {
+      res.resume(); // drain response
+      console.log(`[Forward] POST /context → ${res.statusCode}`);
+    });
+    req.on('error', (e) => console.warn('[Forward] POST failed:', e.message));
+    req.write(postData);
+    req.end();
 
   } catch (e) {
     // VLM response wasn't valid JSON — skip silently
