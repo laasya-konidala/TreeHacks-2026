@@ -15,8 +15,9 @@ import re
 from typing import Any, Optional
 
 import anthropic
+import httpx
 
-from agents.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from agents.config import ANTHROPIC_API_KEY, BACKEND_URL, CLAUDE_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -218,9 +219,23 @@ def generate_visualization(
                 "layout": {"title": title, "margin": {"t": 40, "b": 40, "l": 50, "r": 20}},
             }
     elif tier == "manim":
-        visualization["code"] = parsed.get("code") or "# Manim script not generated"
-        # Optional: backend can run manim and set status_url; here we just pass code for placeholder or future use
+        manim_code = parsed.get("code") or ""
+        visualization["code"] = manim_code
         visualization["status_url"] = None
+        # Kick off a render job on the backend
+        if manim_code:
+            try:
+                resp = httpx.post(
+                    f"{BACKEND_URL}/manim/render",
+                    json={"code": manim_code, "session_id": session_id},
+                    timeout=10.0,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    visualization["status_url"] = data.get("status_url")
+                    logger.info(f"[tool_visualization] Manim render started: {data.get('job_id')}")
+            except Exception as e:
+                logger.warning(f"[tool_visualization] Could not start manim render: {e}")
 
     return {
         "content_type": "visualization",
