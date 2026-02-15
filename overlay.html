@@ -19,6 +19,8 @@
       right: 16px;
       bottom: 16px;
       width: 340px;
+      min-width: 260px;
+      max-width: 600px;
       background: rgba(20, 20, 30, 0.85);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
@@ -28,6 +30,34 @@
       flex-direction: column;
       overflow: hidden;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ── Resize handle (left edge) ── */
+    .resize-handle {
+      position: absolute;
+      top: 0;
+      left: -4px;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 100;
+      -webkit-app-region: no-drag;
+    }
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 40px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.15);
+      transition: background 0.2s;
+    }
+    .resize-handle:hover::after,
+    .resize-handle:active::after {
+      background: rgba(255, 255, 255, 0.4);
     }
 
     /* ── Header ── */
@@ -235,12 +265,12 @@
       margin-bottom: 4px;
     }
     .viz-feed-card .viz-canvas {
-      min-height: 100px;
-      max-height: 300px;
+      min-height: 140px;
+      max-height: 500px;
       background: rgba(0, 0, 0, 0.15);
       border-radius: 8px;
-      padding: 8px;
-      margin-bottom: 4px;
+      padding: 10px;
+      margin-bottom: 6px;
       overflow-x: hidden;
       overflow-y: auto;
     }
@@ -415,15 +445,8 @@
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
-  <div class="panel">
-    <div class="avatar-row">
-      <label for="avatarSelect" class="avatar-label">Avatar</label>
-      <select id="avatarSelect" class="avatar-select" title="Choose avatar">
-        <option value="plato">Plato</option>
-        <option value="socrates">Einstein</option>
-        <option value="einstein">Darwin</option>
-      </select>
-    </div>
+  <div class="panel" id="panel">
+    <div class="resize-handle" id="resizeHandle"></div>
     <div class="header">
       <div class="header-left">
         <div class="agent-icon idle" id="agentIcon">👁️</div>
@@ -552,10 +575,43 @@
       micIndicator.classList.remove('listening');
     }
 
-    // ── Avatar dropdown ──
-    document.getElementById('avatarSelect').addEventListener('change', (e) => {
-      window.api.setAvatar(e.target.value);
-    });
+    // Avatar dropdown removed
+
+    // ── Panel resize logic ──
+    (function() {
+      var panel = document.getElementById('panel');
+      var handle = document.getElementById('resizeHandle');
+      var dragging = false;
+      var startX, startWidth;
+
+      handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        dragging = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        // Dragging left edge: moving mouse left = wider, right = narrower
+        var delta = startX - e.clientX;
+        var newWidth = Math.min(600, Math.max(260, startWidth + delta));
+        panel.style.width = newWidth + 'px';
+      });
+
+      document.addEventListener('mouseup', function() {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        // Re-render any Plotly charts to fit new width
+        panel.querySelectorAll('.viz-canvas .js-plotly-plot').forEach(function(el) {
+          if (window.Plotly) Plotly.Plots.resize(el);
+        });
+      });
+    })();
 
     // ── IPC listeners ──
     // Speech recognition disabled — causes chunked_data_pipe spam in Electron
@@ -592,17 +648,22 @@
       // LaTeX
       if (tier === 'latex' || (tier === 'static' && (payload.format || 'latex') === 'latex')) {
         var content = payload.content || '';
-        if (window.katex) {
+        // Check if content looks like actual LaTeX (has backslash commands or math symbols)
+        var looksLikeLatex = /[\\{}_^]/.test(content);
+        if (looksLikeLatex && window.katex) {
           canvasEl.innerHTML = '';
           var wrap = document.createElement('div');
+          wrap.style.overflowX = 'auto';
+          wrap.style.textAlign = 'center';
           canvasEl.appendChild(wrap);
           try {
             katex.render(content, wrap, { throwOnError: false, displayMode: true });
           } catch (e) {
-            wrap.innerHTML = '<pre style="color:#9ca3af;">' + escapeHtml(content) + '</pre>';
+            wrap.innerHTML = '<p style="color:#d1d5db;font-size:13px;line-height:1.5;white-space:normal;word-wrap:break-word;">' + escapeHtml(content) + '</p>';
           }
         } else {
-          canvasEl.innerHTML = '<pre style="color:#9ca3af;">' + escapeHtml(content) + '</pre>';
+          // Plain text fallback — not actual LaTeX
+          canvasEl.innerHTML = '<p style="color:#d1d5db;font-size:13px;line-height:1.5;padding:12px;white-space:normal;word-wrap:break-word;">' + escapeHtml(content || 'No content available.') + '</p>';
         }
         return;
       }
@@ -638,16 +699,46 @@
         try {
           canvasEl.innerHTML = '';
           var code = payload.code;
-          // Try executing D3 code directly
+
+          // Sanitize common LLM code issues before attempting execution
+          function sanitizeD3Code(src) {
+            // Strip markdown fences if Claude wrapped the code
+            src = src.replace(/^```[\w]*\n?/gm, '').replace(/```$/gm, '');
+            // Replace smart/curly quotes with straight quotes
+            src = src.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
+            // Replace arrow functions: (d) => expr  →  function(d) { return expr; }
+            // Simple single-expression arrows only
+            src = src.replace(/\(([^)]*)\)\s*=>\s*([^{;\n]+)/g, 'function($1) { return $2; }');
+            src = src.replace(/([a-zA-Z_$]\w*)\s*=>\s*([^{;\n]+)/g, 'function($1) { return $2; }');
+            return src;
+          }
+
+          code = sanitizeD3Code(code);
+
           var fn;
+          var suffix = '\n;if(typeof draw==="function")draw(container);';
           try {
-            fn = new Function('container', code + '\n;if(typeof draw==="function")draw(container);');
+            fn = new Function('container', code + suffix);
           } catch (syntaxErr) {
-            // Common issue: apostrophes inside single-quoted strings (e.g. 'O's!')
-            // Fix: replace all single quotes with backticks (template literals handle apostrophes)
-            console.warn('[D3 render] SyntaxError, retrying with backtick fix:', syntaxErr.message);
-            code = code.replace(/'/g, '`');
-            fn = new Function('container', code + '\n;if(typeof draw==="function")draw(container);');
+            console.warn('[D3 render] SyntaxError (attempt 1):', syntaxErr.message);
+            // Attempt 2: replace single quotes with double quotes
+            var code2 = code.replace(/'/g, '"');
+            try {
+              fn = new Function('container', code2 + suffix);
+              code = code2;
+            } catch (syntaxErr2) {
+              console.warn('[D3 render] SyntaxError (attempt 2):', syntaxErr2.message);
+              // Attempt 3: replace single quotes with backticks (template literals)
+              var code3 = code.replace(/'/g, '`');
+              try {
+                fn = new Function('container', code3 + suffix);
+                code = code3;
+              } catch (syntaxErr3) {
+                console.warn('[D3 render] SyntaxError (attempt 3):', syntaxErr3.message);
+                // Give up — show the error
+                throw syntaxErr;
+              }
+            }
           }
           fn(canvasEl);
           // Make any generated SVGs responsive so they fit the sidebar

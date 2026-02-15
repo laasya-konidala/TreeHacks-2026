@@ -308,7 +308,7 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
                     "title": f"Visualizing {topic}",
                     "narration": "Could not generate visualization this time.",
                     "format": "latex",
-                    "content": "\\text{Visualization unavailable — retrying next cycle}",
+                    "content": "Visualization unavailable. Will retry next cycle.",
                 },
                 "scene": {},
             }
