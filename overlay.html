@@ -329,6 +329,10 @@
     .call-row.slide-row {
       justify-content: center;
       width: 100%;
+      display: none;
+    }
+    .call-row.slide-row.visible {
+      display: flex;
     }
     .slide-to-call-track {
       width: 100%;
@@ -393,20 +397,6 @@
     }
     .zoom-btn:hover { background: rgba(255, 255, 255, 0.12); }
     .zoom-btn.connected { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); }
-    .end-call-btn {
-      padding: 8px 12px;
-      border-radius: 8px;
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      background: rgba(239, 68, 68, 0.2);
-      color: #fca5a5;
-      font-size: 12px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .end-call-btn:hover { background: rgba(239, 68, 68, 0.35); }
-    .end-call-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
@@ -460,8 +450,8 @@
         <div class="voice-bar"></div>
         <div class="voice-bar"></div>
       </div>
-      <div class="call-row slide-row">
-        <div class="slide-to-call-track" id="slideToCallTrack" title="Slide right to start call">
+      <div class="call-row slide-row" id="slideRow">
+        <div class="slide-to-call-track" id="slideToCallTrack" title="Slide to unlock your question">
           <span class="label" id="slideToCallLabel">Slide to call</span>
           <div class="slide-to-call-thumb" id="slideToCallThumb">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
@@ -471,10 +461,6 @@
       <div class="call-row zoom-btns">
         <button class="zoom-btn" id="zoomConnectBtn">Connect Zoom</button>
         <button class="zoom-btn" id="zoomResetBtn">New link</button>
-        <button class="end-call-btn" id="endCallBtn" title="End call">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-          End call
-        </button>
       </div>
     </div>
   </div>
@@ -714,6 +700,18 @@
         return;
       }
 
+      // voice_call: show slide row with "Unlock your question", cat will say it on unlock (no feed item)
+      if (msg.tool_used === 'voice_call' && (msg.content || '').trim()) {
+        pendingVoiceQuestion = (msg.content || '').trim();
+        const slideRowEl = document.getElementById('slideRow');
+        if (slideRowEl) {
+          slideRowEl.classList.add('visible');
+          slideToCallLabel.textContent = 'Unlock your question';
+          if (window.resetSlideThumb) window.resetSlideThumb();
+        }
+        return;
+      }
+
       // Non-visualization agent response
       const agentLabel = { conceptual: 'Conceptual', applied: 'Applied', extension: 'Extension', visualizer: 'Visualizer' }[msg.agent_type] || msg.agent_type || 'Agent';
       const item = document.createElement('div');
@@ -789,9 +787,9 @@
     const slideToCallThumb = document.getElementById('slideToCallThumb');
     const slideToCallLabel = document.getElementById('slideToCallLabel');
     const voiceBarsRow = document.getElementById('voiceBarsRow');
+    let pendingVoiceQuestion = null;
     const zoomConnectBtn = document.getElementById('zoomConnectBtn');
     const zoomResetBtn = document.getElementById('zoomResetBtn');
-    const endCallBtn = document.getElementById('endCallBtn');
 
     let realtimeSession = null;
 
@@ -870,6 +868,7 @@
         thumb.style.transform = 'translateX(0)';
         track.classList.remove('triggered');
       }
+      window.resetSlideThumb = resetThumb;
 
       thumb.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -893,11 +892,27 @@
         dragging = false;
         const maxSlide = getMaxSlide();
         if (currentX >= maxSlide * 0.85) {
-          inCall = true;
-          slideToCallLabel.textContent = 'In call';
-          thumb.style.transform = `translateX(${maxSlide}px)`;
-          currentX = maxSlide;
-          launchZoomCall();
+          if (pendingVoiceQuestion) {
+            const toSpeak = pendingVoiceQuestion;
+            pendingVoiceQuestion = null;
+            resetThumb();
+            const slideRowEl = document.getElementById('slideRow');
+            if (slideRowEl) slideRowEl.classList.remove('visible');
+            slideToCallLabel.textContent = 'Slide to call';
+            if (voiceBarsRow) voiceBarsRow.classList.add('speaking');
+            const u = new SpeechSynthesisUtterance(toSpeak);
+            u.onend = () => {
+              if (voiceBarsRow) voiceBarsRow.classList.remove('speaking');
+              if (isActive && typeof startSpeechRecognition === 'function') startSpeechRecognition();
+            };
+            speechSynthesis.speak(u);
+          } else {
+            inCall = true;
+            slideToCallLabel.textContent = 'In call';
+            thumb.style.transform = `translateX(${maxSlide}px)`;
+            currentX = maxSlide;
+            launchZoomCall();
+          }
         } else {
           resetThumb();
         }
@@ -909,12 +924,6 @@
         resetThumb();
       });
     })();
-
-    endCallBtn.addEventListener('click', () => {
-      stopRealtimeVoice();
-      window.api.closeZoomMeeting();
-      slideToCallLabel.textContent = 'Slide to call';
-    });
 
     window.api.onZoomMeetingClosed(() => {
       stopRealtimeVoice();
