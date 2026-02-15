@@ -1,10 +1,17 @@
 """
 Orchestrator Agent — Routes to the right learning agent based on VLM context.
 
+Also the public-facing agent for ASI:One: includes the Chat Protocol
+(for discoverability) and Payment Protocol (for monetization).
+
 Decision flow:
   1. VLM says what student is doing → pick agent (conceptual / applied / extension)
   2. BKT says mastery level → calibrate exercise difficulty
   3. Timing logic detects natural moments → decide WHEN to prompt
+
+ASI:One flow:
+  - User sends ChatMessage via ASI:One → chat_proto handles it
+  - User can pay via Payment Protocol → payment_proto handles it
 """
 import asyncio
 import json
@@ -17,27 +24,45 @@ from uagents import Agent, Context
 
 from agents.config import (
     ORCHESTRATOR_SEED, ORCHESTRATOR_PORT, BACKEND_URL,
+    CONCEPTUAL_SEED, APPLIED_SEED, EXTENSION_SEED,
     GEMINI_API_KEY, GEMINI_MODEL,
     AGENTVERSE_ENABLED, AGENTVERSE_URL,
 )
 from agents.models import VLMContext, AgentRequest, AgentResponse, TimingSignal
 from agents.learner_model import ConfidenceWeightedBKT
 
+# Import ASI:One compatible protocols
+from agents.chat_protocol import chat_proto
+from agents.payment_protocol import payment_proto, tier_protocol, set_agent_wallet
+
 logger = logging.getLogger(__name__)
 
 # ─── Agent Setup ───
-orchestrator = Agent(
+_orch_kwargs = dict(
     name="learning_orchestrator",
     port=ORCHESTRATOR_PORT,
     seed=ORCHESTRATOR_SEED,
-    endpoint=[f"http://127.0.0.1:{ORCHESTRATOR_PORT}/submit"],
-    agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
-    mailbox=AGENTVERSE_ENABLED,
     description=(
-        "Learning orchestrator — observes VLM screen analysis, detects natural "
-        "moments to prompt, and routes to the right learning agent."
+        "Ambient Learning Orchestrator — an AI tutoring agent that observes what "
+        "you're studying (via screen analysis), detects when you need help, and "
+        "provides contextual questions, visualizations, and guided problem-solving. "
+        "Ask me about any topic — math, science, programming, or anything you're "
+        "learning. I can explain concepts, help you work through problems, and "
+        "push you to make connections across topics."
     ),
 )
+if AGENTVERSE_ENABLED:
+    _orch_kwargs["mailbox"] = True
+    _orch_kwargs["publish_agent_details"] = True
+else:
+    _orch_kwargs["endpoint"] = [f"http://127.0.0.1:{ORCHESTRATOR_PORT}/submit"]
+
+orchestrator = Agent(**_orch_kwargs)
+
+# ─── Include ASI:One Protocols (publish_manifest=True makes them discoverable) ───
+orchestrator.include(chat_proto, publish_manifest=True)
+orchestrator.include(payment_proto, publish_manifest=True)
+orchestrator.include(tier_protocol, publish_manifest=True)
 
 # ─── State ───
 bkt = ConfidenceWeightedBKT()
@@ -66,9 +91,9 @@ def _resolve_agent_addresses():
     from uagents import Agent as _Agent
 
     seeds = {
-        "conceptual": "ambient_learning_conceptual_seed_2026",
-        # "applied": "ambient_learning_applied_seed_2026",     # TODO: add later
-        # "extension": "ambient_learning_extension_seed_2026",  # TODO: add later
+        "conceptual": CONCEPTUAL_SEED,
+        "applied": APPLIED_SEED,
+        "extension": EXTENSION_SEED,
     }
 
     for name, seed in seeds.items():
@@ -127,16 +152,14 @@ def should_prompt_now(vlm: VLMContext) -> tuple[bool, str]:
 def pick_agent(vlm: VLMContext) -> str:
     """
     Pick which agent based on what the student is DOING.
-    For now, only conceptual exists — others return "conceptual" as fallback.
+    Now routes to all three agents.
     """
     mode = (vlm.mode or "").upper()
 
     if mode == "APPLIED":
-        # TODO: route to applied agent when it exists
-        return "conceptual"  # fallback for now
+        return "applied"
     elif mode == "CONSOLIDATION":
-        # TODO: route to extension agent when it exists
-        return "conceptual"  # fallback for now
+        return "extension"
     else:
         return "conceptual"
 
@@ -252,7 +275,18 @@ async def handle_agent_response(ctx: Context, sender: str, msg: AgentResponse):
 # ─── Startup ───
 @orchestrator.on_event("startup")
 async def on_startup(ctx: Context):
-    """Resolve agent addresses on startup."""
+    """Resolve agent addresses and set up wallet on startup."""
     _resolve_agent_addresses()
-    logger.info("[Orchestrator] Ready — polling for VLM context every 3s")
+
+    # Inject wallet into payment protocol for on-chain verification
+    set_agent_wallet(orchestrator.wallet)
+
+    logger.info("[Orchestrator] Ready — polling for VLM context every 8s")
+    logger.info(f"[Orchestrator] Agent address: {orchestrator.address}")
+    logger.info(f"[Orchestrator] Chat Protocol: included (ASI:One discoverable)")
+    logger.info(f"[Orchestrator] Payment Protocol: included (FET monetization)")
+    logger.info(f"[Orchestrator] Agentverse: {'ENABLED' if AGENTVERSE_ENABLED else 'disabled'}")
     logger.info(f"[Orchestrator] Min seconds between prompts: {MIN_SECONDS_BETWEEN_PROMPTS}")
+
+    for name, addr in state["agent_addresses"].items():
+        logger.info(f"[Orchestrator] {name}: {addr}")

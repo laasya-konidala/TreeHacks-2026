@@ -1,123 +1,78 @@
 """
-Chat Protocol for ASI:One discovery.
+ASI:One-compatible Chat Protocol for the Ambient Learning Agent System.
 
-Uses uagents Dialogue with the proper Edge-based handler pattern.
-When ASI:One users discover this agent, they can chat with it directly.
-Every incoming message is treated as an explicit tutoring help request.
+Uses the standard uagents_core chat_protocol_spec so that ASI:One can
+discover and route queries to our orchestrator.  Every incoming ChatMessage
+is treated as a tutoring help request — we generate a response via Gemini
+and send it back as a ChatMessage.
 """
-import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 
-from uagents import Context, Model
-from uagents.experimental.dialogues import Dialogue, Edge, Node
+from uagents import Context, Protocol
+from uagents_core.contrib.protocols.chat import (
+    ChatAcknowledgement,
+    ChatMessage,
+    TextContent,
+    StartSessionContent,
+    EndSessionContent,
+    chat_protocol_spec,
+)
 
 logger = logging.getLogger(__name__)
 
-
-# ─── Message Models ───
-
-class ChatMessage(Model):
-    """Incoming chat from ASI:One user."""
-    text: str
-    user_id: str = ""
-    timestamp: str = ""
+# ─── Protocol (ASI:One compatible) ───
+chat_proto = Protocol(spec=chat_protocol_spec)
 
 
-class ChatResponse(Model):
-    """Agent's response back to ASI:One user."""
-    text: str
-    agent_type: str = "orchestrator"
-    session_id: str = ""
+# ─── Helpers ───
 
-
-class ChatEnd(Model):
-    """Signals end of dialogue."""
-    reason: str = "completed"
-
-
-# ─── Handler Functions ───
-
-async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
-    """Handle incoming chat from ASI:One users."""
-    logger.info(f"ASI:One chat from {sender}: {msg.text[:100]}")
-
-    response_text = _generate_direct_response(msg.text)
-
-    await ctx.send(
-        sender,
-        ChatResponse(
-            text=response_text,
-            agent_type="orchestrator",
-            session_id=f"asione_{sender}_{int(time.time())}",
-        ),
+def create_text_chat(text: str, end_session: bool = False) -> ChatMessage:
+    """Create a ChatMessage wrapping plain text."""
+    content = [TextContent(type="text", text=text)]
+    if end_session:
+        content.append(EndSessionContent(type="end-session"))
+    return ChatMessage(
+        timestamp=datetime.now(timezone.utc),
+        msg_id=uuid4(),
+        content=content,
     )
 
 
-async def handle_chat_response(ctx: Context, sender: str, msg: ChatResponse):
-    """Handle response acknowledgment."""
-    logger.info(f"Chat response sent to {sender}: {msg.text[:50]}...")
-
-
-async def handle_chat_end(ctx: Context, sender: str, msg: ChatEnd):
-    """Handle end of chat dialogue."""
-    logger.info(f"Chat ended with {sender}: {msg.reason}")
-
-
-# ─── Dialogue State Machine ───
-
-default_node = Node(name="default", description="Idle — waiting for user", initial=True)
-chatting_node = Node(name="chatting", description="Active tutoring session")
-end_node = Node(name="end", description="Session completed")
-
-init_edge = Edge(
-    name="start_chat",
-    description="User initiates a tutoring request",
-    parent=None,
-    child=chatting_node,
-)
-init_edge.model = ChatMessage
-init_edge.func = handle_chat_message
-
-continue_edge = Edge(
-    name="continue_chat",
-    description="User sends follow-up message",
-    parent=chatting_node,
-    child=chatting_node,
-)
-continue_edge.model = ChatMessage
-continue_edge.func = handle_chat_message
-
-respond_edge = Edge(
-    name="respond",
-    description="Agent sends tutoring response",
-    parent=chatting_node,
-    child=chatting_node,
-)
-respond_edge.model = ChatResponse
-respond_edge.func = handle_chat_response
-
-end_edge = Edge(
-    name="end_chat",
-    description="End the tutoring session",
-    parent=chatting_node,
-    child=end_node,
-)
-end_edge.model = ChatEnd
-end_edge.func = handle_chat_end
-
-chat_dialogue = Dialogue(
-    name="ambient_learning_chat",
-    version="0.1.0",
-    nodes=[default_node, chatting_node, end_node],
-    edges=[init_edge, continue_edge, respond_edge, end_edge],
+SYSTEM_PROMPT = (
+    "You are an ambient learning tutor. A user found you on ASI:One "
+    "and is asking for help with studying. Be concise, friendly, and "
+    "helpful. If they ask about a concept, explain it clearly with an "
+    "analogy. If they ask how to do something, give clear steps. "
+    "Keep responses under 3 paragraphs.\n\n"
+    "You are part of the Ambient Learning Agent System — a multi-agent "
+    "tutoring system that observes what students are working on and "
+    "helps them build understanding through contextual questions, "
+    "visualizations, and guided problem-solving."
 )
 
-
-# ─── Helper ───
 
 def _generate_direct_response(user_text: str) -> str:
-    """Generate a direct response for ASI:One chat users via Gemini."""
+    """Generate a response for ASI:One chat users. Tries Claude first, falls back to Gemini."""
+    # Try Claude first (reliable, high rate limits)
+    try:
+        import anthropic
+        from agents.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+
+        if ANTHROPIC_API_KEY:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            response = client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=500,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_text}],
+            )
+            return response.content[0].text
+    except Exception as e:
+        logger.warning(f"Claude failed for ASI:One chat, trying Gemini: {e}")
+
+    # Fall back to Gemini
     try:
         from google import genai
         from google.genai import types
@@ -128,20 +83,61 @@ def _generate_direct_response(user_text: str) -> str:
             model=GEMINI_MODEL,
             contents=user_text,
             config=types.GenerateContentConfig(
-                system_instruction=(
-                    "You are an ambient learning tutor. A user found you on ASI:One "
-                    "and is asking for help. Be concise, friendly, and helpful. "
-                    "If they ask about a concept, explain it clearly with an analogy. "
-                    "If they ask how to do something, give clear steps. "
-                    "Keep responses under 3 paragraphs."
-                ),
-                max_output_tokens=300,
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=500,
             ),
         )
-        return response.text or ""
+        return response.text or "I'm here to help you learn! Ask me anything."
     except Exception as e:
-        logger.error(f"Gemini API call failed for ASI:One chat: {e}")
+        logger.error(f"Both Claude and Gemini failed for ASI:One chat: {e}")
         return (
             "I'd love to help, but I'm having trouble connecting to my AI backend. "
             "Try again in a moment!"
         )
+
+
+# ─── Message Handlers ───
+
+@chat_proto.on_message(ChatMessage)
+async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
+    """Handle incoming chat from ASI:One users or other agents."""
+    ctx.logger.info(f"Chat message from {sender}")
+
+    # Always acknowledge receipt immediately
+    await ctx.send(
+        sender,
+        ChatAcknowledgement(
+            timestamp=datetime.now(timezone.utc),
+            acknowledged_msg_id=msg.msg_id,
+        ),
+    )
+
+    # Process each content item
+    for item in msg.content:
+        if isinstance(item, StartSessionContent):
+            ctx.logger.info(f"Session started with {sender}")
+            continue
+
+        elif isinstance(item, TextContent):
+            ctx.logger.info(f"Text from {sender}: {item.text[:120]}")
+
+            # Generate a tutoring response
+            response_text = _generate_direct_response(item.text)
+
+            # Send response back
+            response = create_text_chat(response_text)
+            await ctx.send(sender, response)
+
+        elif isinstance(item, EndSessionContent):
+            ctx.logger.info(f"Session ended with {sender}")
+
+        else:
+            ctx.logger.info(f"Unexpected content type from {sender}")
+
+
+@chat_proto.on_message(ChatAcknowledgement)
+async def handle_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
+    """Handle acknowledgement for messages we sent."""
+    ctx.logger.info(
+        f"Acknowledged by {sender} for msg_id={msg.acknowledged_msg_id}"
+    )

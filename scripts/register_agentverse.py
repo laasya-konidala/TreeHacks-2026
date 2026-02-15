@@ -3,7 +3,7 @@ Agentverse Registration Helper.
 
 This script prints agent addresses and instructions for registering
 on Agentverse. The actual registration happens automatically when you
-run `python run.py` with AGENTVERSE_ENABLED=true.
+run `python run.py` with AGENTVERSE_ENABLED=true and mailbox=True.
 
 Usage:
   1. Sign up at https://agentverse.ai (free)
@@ -11,7 +11,8 @@ Usage:
        python scripts/register_agentverse.py
   3. Set env vars and run the system:
        export AGENTVERSE_ENABLED=true
-       export ANTHROPIC_API_KEY=sk-ant-...
+       export GEMINI_API_KEY=...
+       export ANTHROPIC_API_KEY=...
        python run.py
   4. The agents auto-register on Agentverse and appear on ASI:One
 """
@@ -22,26 +23,29 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.config import (
     ORCHESTRATOR_SEED, ORCHESTRATOR_PORT,
-    DEEP_DIVER_SEED, DEEP_DIVER_PORT,
-    ASSESSOR_SEED, ASSESSOR_PORT,
-    VISUALIZER_SEED, VISUALIZER_PORT,
+    CONCEPTUAL_SEED, CONCEPTUAL_PORT,
+    APPLIED_SEED, APPLIED_PORT,
+    EXTENSION_SEED, EXTENSION_PORT,
+    MONITOR_SEED, MONITOR_PORT,
     AGENTVERSE_ENABLED,
 )
 
 
 def main():
-    # Import agents to get their addresses
     from uagents import Agent
 
     agents_info = [
         ("Orchestrator", ORCHESTRATOR_SEED, ORCHESTRATOR_PORT, "learning_orchestrator",
-         "Central brain — detects confusion from behavioral signals, routes to specialists, tracks mastery via BKT"),
-        ("Deep Diver", DEEP_DIVER_SEED, DEEP_DIVER_PORT, "concept_deep_diver",
-         "Multi-turn Socratic dialogue for conceptual understanding"),
-        ("Assessor", ASSESSOR_SEED, ASSESSOR_PORT, "contrastive_assessor",
-         "Contrastive 'what-if' challenges to test understanding"),
-        ("Visualizer", VISUALIZER_SEED, VISUALIZER_PORT, "math_visualizer",
-         "3Blue1Brown-style visualization scene descriptions"),
+         "Central brain — ASI:One entry point with Chat + Payment protocols. "
+         "Routes to conceptual/applied/extension agents, tracks mastery via BKT."),
+        ("Conceptual", CONCEPTUAL_SEED, CONCEPTUAL_PORT, "conceptual_understanding",
+         "Helps students build knowledge via contextual questions and visualizations."),
+        ("Applied", APPLIED_SEED, APPLIED_PORT, "applied_problem_solving",
+         "Scaffolds reasoning for active problem-solving without giving answers."),
+        ("Extension", EXTENSION_SEED, EXTENSION_PORT, "extension_stretch",
+         "Pushes students to make cross-topic connections and tackle stretch challenges."),
+        ("Monitor", MONITOR_SEED, MONITOR_PORT, "metrics_monitor",
+         "Sends metrics triggers to orchestrator using ASI-1 ChatProtocol."),
     ]
 
     print("\n" + "=" * 64)
@@ -62,12 +66,12 @@ def main():
     print(f"  AGENTVERSE_ENABLED = {AGENTVERSE_ENABLED}")
 
     if AGENTVERSE_ENABLED:
-        print("  ✓ Agents will auto-register on Agentverse when you run python run.py")
-        print("  ✓ Chat Protocol included on orchestrator (discoverable on ASI:One)")
-        print("  ✓ Payment Protocol included on orchestrator (monetization ready)")
+        print("  [ok] Agents will auto-register on Agentverse when you run: python run.py")
+        print("  [ok] Chat Protocol on orchestrator (discoverable on ASI:One)")
+        print("  [ok] Payment Protocol on orchestrator (FET monetization)")
     else:
-        print("  → Agents will run locally only (no Agentverse registration)")
-        print("  → To enable: export AGENTVERSE_ENABLED=true")
+        print("  --> Agents will run locally only (no Agentverse registration)")
+        print("  --> To enable: export AGENTVERSE_ENABLED=true")
 
     print("\n" + "=" * 64)
     print("  HOW TO MAKE AGENTS DISCOVERABLE ON ASI:ONE")
@@ -77,22 +81,25 @@ def main():
 
   Step 2: Set environment variables:
     export AGENTVERSE_ENABLED=true
-    export GEMINI_API_KEY=your_gemini_api_key_here
+    export GEMINI_API_KEY=your_gemini_api_key
+    export ANTHROPIC_API_KEY=your_anthropic_api_key
 
   Step 3: Run the system:
     python run.py
 
-  Step 4: The orchestrator agent auto-registers on Agentverse with:
-    - Chat Protocol  → users on ASI:One can chat directly
-    - Payment Protocol → monetization via ASI tokens
-    - Description     → searchable on the Almanac
+  Step 4: The orchestrator auto-registers on Agentverse with:
+    - Chat Protocol      -> users on ASI:One can chat directly
+    - Payment Protocol   -> monetization via FET tokens
+    - Agent description  -> searchable on the Almanac
 
-  Step 5: Go to ASI:One (asi1.ai) and search for your agent by
-    name ("learning_orchestrator") or address to verify it's live.
+  Step 5: Open the Local Agent Inspector URL from the terminal output
+    to connect your agent to Agentverse (mailbox setup).
 
-  Note: The other 3 agents (deep_diver, assessor, visualizer) also
-  register but they primarily receive messages from the orchestrator,
-  not directly from ASI:One users.
+  Step 6: Go to ASI:One (asi1.ai), enable "Agents" toggle, and
+    search for "ambient learning" or "learning orchestrator" to verify.
+
+  Note: The sub-agents (conceptual, applied, extension) primarily
+  receive messages from the orchestrator, not directly from ASI:One.
 """)
 
     # Check env vars
@@ -100,10 +107,18 @@ def main():
     print("  ENVIRONMENT CHECK")
     print("=" * 64)
 
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
-    key_status = "✓ SET" if gemini_key else "✗ NOT SET — Gemini will not work"
-    print(f"  GEMINI_API_KEY: {key_status}")
-    print(f"  AGENTVERSE_ENABLED: {'✓ true' if AGENTVERSE_ENABLED else '→ false (local only)'}")
+    for var, label in [
+        ("GEMINI_API_KEY", "Gemini (screen analysis + chat)"),
+        ("ANTHROPIC_API_KEY", "Claude (exercise generation)"),
+        ("AGENTVERSE_ENABLED", "Agentverse registration"),
+    ]:
+        val = os.environ.get(var, "")
+        if var == "AGENTVERSE_ENABLED":
+            status = "[ok] true" if AGENTVERSE_ENABLED else "--> false (local only)"
+        else:
+            status = "[ok] SET" if val else "[!!] NOT SET"
+        print(f"  {var}: {status}  ({label})")
+
     print()
 
 

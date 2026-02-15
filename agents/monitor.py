@@ -37,15 +37,18 @@ MONITOR_PORT = 8005
 metrics_triggered = True  # flip to False to skip sending
 
 # ─── Agent Setup ───
-monitor = Agent(
+_mon_kwargs = dict(
     name="metrics_monitor",
     port=MONITOR_PORT,
     seed=MONITOR_SEED,
-    endpoint=[f"http://127.0.0.1:{MONITOR_PORT}/submit"],
-    agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
-    mailbox=AGENTVERSE_ENABLED,
-    publish_agent_details=AGENTVERSE_ENABLED,
 )
+if AGENTVERSE_ENABLED:
+    _mon_kwargs["mailbox"] = True
+    _mon_kwargs["publish_agent_details"] = True
+else:
+    _mon_kwargs["endpoint"] = [f"http://127.0.0.1:{MONITOR_PORT}/submit"]
+
+monitor = Agent(**_mon_kwargs)
 
 # ─── Chat Protocol (ASI-1 compatible) ───
 chat_proto = Protocol(spec=chat_protocol_spec)

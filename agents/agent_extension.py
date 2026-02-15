@@ -28,19 +28,22 @@ logger = logging.getLogger(__name__)
 EXTENSION_SEED = "ambient_learning_extension_seed_2026"
 EXTENSION_PORT = 8004
 
-extension_agent = Agent(
+_agent_kwargs = dict(
     name="extension_stretch",
     port=EXTENSION_PORT,
     seed=EXTENSION_SEED,
-    endpoint=[f"http://127.0.0.1:{EXTENSION_PORT}/submit"],
-    agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
-    mailbox=AGENTVERSE_ENABLED,
     description=(
         "Extension agent — pushes students beyond current material by generating "
         "transfer questions, cross-topic connections, and stretch challenges "
         "based on demonstrated mastery. Takes a topic to a new abstraction of knowledge."
     ),
 )
+if AGENTVERSE_ENABLED:
+    _agent_kwargs["mailbox"] = True
+else:
+    _agent_kwargs["endpoint"] = [f"http://127.0.0.1:{EXTENSION_PORT}/submit"]
+
+extension_agent = Agent(**_agent_kwargs)
 
 # ─── Claude Client ───
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -66,14 +69,16 @@ Recent activity:
 {speech_context}"""
 
 # ─── Exercise Generation Prompts ───
-VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student. Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
+VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student. 
+The student has strong understanding of the topic at hand and is ready to go beyond the current material, at a level of abstraction one away or two away from the current concept. YOu want to make jumps in reasoning logical and fluid. 
+ Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
 
 Rules:
-- Reference EXACTLY what's on their screen (specific equations, diagrams, code, etc.)
-- Do not use any novel or new concepts beyond the level of understanding of the current concept in front of the student
+- Reference concepts in the context of what's on their screen (specific equations, diagrams, code, etc.)
+- When making extensions, make sure to make logicial jumps in reasoning that follow from the original content
 - Sound natural and spoken — this will be read aloud, not displayed as text
-- Open with ONE clear thought or question to get them talking
-- Don't give the answer — make them think, but do not arbitrarily challenge them
+- Open with ONE clear thought or question to get them talking, 
+- Don't give the answer, and do not make the extension trivial, but do not make it too difficult as well— make them think, but do not arbitrarily challenge them
 - Keep it to 2-3 sentences max
 - Do NOT give incorrect information, that is worse than giving no information at all"""
 
@@ -92,6 +97,8 @@ VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a visualization 
 Rules:
 - Describe a specific visualization related to what's on screen
 - Keep it easily extendable to their current concept but able to adjust the specific variables of whats going on
+- make the extension soemthign that leads to adjustments of a particular feature, that points to a new classification of the concept or a new abstraction of the concept 
+- Make sure it is an intuitive and logitical jump in reasoning that can be visually displayed
 - Make it concrete: "Imagine..." or "Picture this..."
 - Keep it to 2-3 sentences
 - Do NOT give incorrect information, that is worse than giving no informtion at all

@@ -28,19 +28,22 @@ logger = logging.getLogger(__name__)
 APPLIED_SEED = "ambient_learning_applied_seed_2026"
 APPLIED_PORT = 8003
 
-applied_agent = Agent(
+_agent_kwargs = dict(
     name="applied_problem_solving",
     port=APPLIED_PORT,
     seed=APPLIED_SEED,
-    endpoint=[f"http://127.0.0.1:{APPLIED_PORT}/submit"],
-    agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
-    mailbox=AGENTVERSE_ENABLED,
     description=(
         "Applied problem-solving agent — helps students work through problems "
         "by scaffolding their reasoning process, identifying stuck points, "
         "and guiding them toward solutions without giving answers directly."
     ),
 )
+if AGENTVERSE_ENABLED:
+    _agent_kwargs["mailbox"] = True
+else:
+    _agent_kwargs["endpoint"] = [f"http://127.0.0.1:{APPLIED_PORT}/submit"]
+
+applied_agent = Agent(**_agent_kwargs)
 
 # ─── Claude Client ───
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

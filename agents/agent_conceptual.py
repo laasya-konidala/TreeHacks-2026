@@ -25,19 +25,22 @@ logger = logging.getLogger(__name__)
 CONCEPTUAL_SEED = "ambient_learning_conceptual_seed_2026"
 CONCEPTUAL_PORT = 8002
 
-conceptual_agent = Agent(
+_agent_kwargs = dict(
     name="conceptual_understanding",
     port=CONCEPTUAL_PORT,
     seed=CONCEPTUAL_SEED,
-    endpoint=[f"http://127.0.0.1:{CONCEPTUAL_PORT}/submit"],
-    agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
-    mailbox=AGENTVERSE_ENABLED,
     description=(
         "Conceptual Understanding agent — helps students build knowledge "
         "by generating contextual questions, visualizations, and checks "
         "based on what they're currently watching or reading."
     ),
 )
+if AGENTVERSE_ENABLED:
+    _agent_kwargs["mailbox"] = True
+else:
+    _agent_kwargs["endpoint"] = [f"http://127.0.0.1:{CONCEPTUAL_PORT}/submit"]
+
+conceptual_agent = Agent(**_agent_kwargs)
 
 # ─── Claude Client ───
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -63,7 +66,8 @@ Recent activity:
 {speech_context}"""
 
 # ─── Exercise Generation Prompts ───
-VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student. Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
+VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student to explore the deep conceptual understanding of the topic at hand .
+ Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
 
 Rules:
 - Reference EXACTLY what's on their screen (specific equations, diagrams, code, etc.)
