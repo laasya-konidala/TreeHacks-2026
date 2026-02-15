@@ -1,9 +1,11 @@
 """
 Main entry point — starts Bureau (agents) + FastAPI server together.
 
-Currently runs:
-  - Orchestrator (routes by VLM context)
+Runs:
+  - Orchestrator (routes by VLM context to the right agent)
   - Conceptual Understanding agent (building knowledge)
+  - Applied Knowledge agent (practicing, coding, solving)
+  - Extension agent (deeper connections, review, consolidation)
 """
 import logging
 import threading
@@ -40,22 +42,28 @@ if __name__ == "__main__":
     # Import agents
     from agents.orchestrator import orchestrator
     from agents.agent_conceptual import conceptual_agent
+    from agents.agent_applied import applied_agent
+    from agents.agent_extension import extension_agent
 
     # Start all agents via Bureau
     bureau = Bureau()
     bureau.add(orchestrator)
     bureau.add(conceptual_agent)
+    bureau.add(applied_agent)
+    bureau.add(extension_agent)
 
     print("\n" + "=" * 60)
     print("  AMBIENT LEARNING AGENT SYSTEM")
     print("=" * 60)
     print(f"  Orchestrator:  {orchestrator.address}")
     print(f"  Conceptual:    {conceptual_agent.address}")
+    print(f"  Applied:       {applied_agent.address}")
+    print(f"  Extension:     {extension_agent.address}")
     print(f"  API Server:    http://localhost:{BACKEND_PORT}")
     print(f"  WebSocket:     ws://localhost:{BACKEND_PORT}/ws")
     print(f"  Health:        http://localhost:{BACKEND_PORT}/health")
     print("=" * 60)
-    print("  Agents: conceptual (applied + extension coming soon)")
+    print("  Routing: CONCEPTUAL → conceptual | APPLIED → applied | CONSOLIDATION → extension")
     print("=" * 60 + "\n")
 
     bureau.run()

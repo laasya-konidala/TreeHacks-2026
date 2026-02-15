@@ -17,7 +17,6 @@ from uagents import Agent, Context
 
 from agents.config import (
     ORCHESTRATOR_SEED, ORCHESTRATOR_PORT, BACKEND_URL,
-    GEMINI_API_KEY, GEMINI_MODEL,
     AGENTVERSE_ENABLED, AGENTVERSE_URL,
 )
 from agents.models import VLMContext, AgentRequest, AgentResponse, TimingSignal
@@ -71,8 +70,8 @@ def _resolve_agent_addresses():
 
     seeds = {
         "conceptual": "ambient_learning_conceptual_seed_2026",
-        # "applied": "ambient_learning_applied_seed_2026",     # TODO: add later
-        # "extension": "ambient_learning_extension_seed_2026",  # TODO: add later
+        "applied": "ambient_learning_applied_seed_2026",
+        "extension": "ambient_learning_extension_seed_2026",
     }
 
     for name, seed in seeds.items():
@@ -159,17 +158,16 @@ def should_prompt_now(vlm: VLMContext) -> tuple[bool, str]:
 def pick_agent(vlm: VLMContext) -> str:
     """
     Pick which agent based on what the student is DOING.
-    For now, only conceptual exists — others return "conceptual" as fallback.
+    Mode comes from the VLM's analysis of the screen.
     """
     mode = (vlm.mode or "").upper()
 
     if mode == "APPLIED":
-        # TODO: route to applied agent when it exists
-        return "conceptual"  # fallback for now
+        return "applied"
     elif mode == "CONSOLIDATION":
-        # TODO: route to extension agent when it exists
-        return "conceptual"  # fallback for now
+        return "extension"
     else:
+        # CONCEPTUAL is the default — reading, watching, learning
         return "conceptual"
 
 
@@ -287,5 +285,6 @@ async def handle_agent_response(ctx: Context, sender: str, msg: AgentResponse):
 async def on_startup(ctx: Context):
     """Resolve agent addresses on startup."""
     _resolve_agent_addresses()
-    logger.info("[Orchestrator] Ready — polling for VLM context every 3s")
-    logger.info(f"[Orchestrator] Min seconds between prompts: {MIN_SECONDS_BETWEEN_PROMPTS}")
+    logger.info("[Orchestrator] Ready — polling for VLM context every 8s")
+    logger.info(f"[Orchestrator] Routes: CONCEPTUAL → conceptual | APPLIED → applied | CONSOLIDATION → extension")
+    logger.info(f"[Orchestrator] Cooldown: {MIN_SECONDS_BETWEEN_PROMPTS}s | Pause: {NATURAL_PAUSE_MIN_SECONDS}s | Stuck: {STUCK_THRESHOLD_SECONDS}s | Fallback: {FALLBACK_PROMPT_SECONDS}s")
