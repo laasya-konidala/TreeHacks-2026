@@ -405,11 +405,8 @@
     });
 
     // ── IPC listeners ──
-    // ⚠️ TEMPORARY: Speech recognition disabled — causes chunked_data_pipe spam in Electron
-    // window.api.onStartMic(() => startSpeechRecognition());
-    // window.api.onStopMic(() => stopSpeechRecognition());
-    window.api.onStartMic(() => console.log('[Speech] Disabled for testing'));
-    window.api.onStopMic(() => console.log('[Speech] Disabled for testing'));
+    window.api.onStartMic(() => startSpeechRecognition());
+    window.api.onStopMic(() => stopSpeechRecognition());
 
     // ── Visualization rendering ──
     const BACKEND_ORIGIN = 'http://localhost:8080';
@@ -447,22 +444,36 @@
         return;
       }
 
-      // D3 (unsandboxed iframe so it can load D3 from CDN)
+      // D3 (direct rendering — D3 loaded in page head, no iframe needed)
       if (tier === 'd3' && payload.code) {
-        var code = payload.code.replace(/<\/script/gi, '<\\/script');
-        var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
-          + '<script src="https://d3js.org/d3.v7.min.js"><\/script>'
-          + '<style>body{margin:0;background:transparent;overflow:hidden;color:#e5e7eb;font-family:sans-serif;}'
-          + 'svg text{fill:#e5e7eb;} svg line,svg path{stroke:#e5e7eb;}</style></head>'
-          + '<body><div id="v" style="width:100%;height:100%;"></div>'
-          + '<script>window.onerror=function(m){document.getElementById("v").innerHTML="<p style=color:#ef4444;font-size:12px>"+m+"</p>"};'
-          + code
-          + '; if(typeof draw==="function") draw(document.getElementById("v"));<\/script></body></html>';
-        var iframe = document.createElement('iframe');
-        iframe.style.cssText = 'width:100%;height:220px;border:0;border-radius:8px;background:rgba(0,0,0,0.15);';
-        iframe.srcdoc = html;
-        canvasEl.innerHTML = '';
-        canvasEl.appendChild(iframe);
+        canvasEl.innerHTML = '<p style="color:#9ca3af;font-size:11px;text-align:center;">Rendering D3...</p>';
+        canvasEl.style.minHeight = '220px';
+        canvasEl.style.background = 'rgba(0,0,0,0.15)';
+        canvasEl.style.borderRadius = '8px';
+        canvasEl.style.padding = '8px';
+        canvasEl.style.overflow = 'hidden';
+
+        console.log('[D3 render] d3 loaded:', !!window.d3, '| code length:', payload.code.length);
+
+        if (!window.d3) {
+          canvasEl.innerHTML = '<p style="color:#ef4444;font-size:12px;">D3 library not loaded — check network</p>';
+          return;
+        }
+
+        try {
+          canvasEl.innerHTML = '';  // clear "Rendering..." only right before exec
+          // Execute D3 code directly in page context (d3 is global from <script> in <head>)
+          var fn = new Function('container', payload.code + '\n;if(typeof draw==="function")draw(container);');
+          fn(canvasEl);
+          console.log('[D3 render] Success — children:', canvasEl.children.length);
+          // If nothing was rendered, show a notice
+          if (canvasEl.children.length === 0 && !canvasEl.querySelector('svg')) {
+            canvasEl.innerHTML = '<p style="color:#f59e0b;font-size:12px;">D3 code ran but produced no visible output</p>';
+          }
+        } catch (e) {
+          console.error('[D3 render] Error:', e);
+          canvasEl.innerHTML = '<p style="color:#ef4444;font-size:12px;">D3 error: ' + escapeHtml(e.message) + '</p>';
+        }
         return;
       }
 
@@ -511,6 +522,17 @@
     // ── Agent responses from backend (via WebSocket → main → IPC) ──
     window.api.onAgentResponse((msg) => {
       emptyState.style.display = 'none';
+
+      // Debug: log everything we receive
+      console.log('[overlay] agent-response received:', JSON.stringify({
+        content_type: msg.content_type,
+        tool_used: msg.tool_used,
+        has_metadata: !!msg.metadata,
+        tier: (msg.metadata || {}).tier,
+        has_viz: !!((msg.metadata || {}).visualization),
+        has_code: !!((msg.metadata || {}).visualization || {}).code,
+        d3_loaded: !!window.d3,
+      }));
 
       const meta = msg.metadata || {};
       const tier = meta.tier;

@@ -329,7 +329,9 @@ function connectAgentWebSocket() {
     agentWs.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        console.log(`[AgentWS] ${msg.agent_type}: ${(msg.content || '').substring(0, 100)}`);
+        const tier = (msg.metadata || {}).tier || '—';
+        const hasCode = !!((msg.metadata || {}).visualization || {}).code;
+        console.log(`[AgentWS] ${msg.agent_type} | type=${msg.content_type} | tier=${tier} | hasCode=${hasCode} | ${(msg.content || '').substring(0, 80)}`);
 
         if (sidebarWindow && !sidebarWindow.isDestroyed()) {
           sidebarWindow.webContents.send('agent-response', msg);

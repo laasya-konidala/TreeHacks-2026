@@ -195,30 +195,26 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
     # Step 1: Pick the best tool
-    # ⚠️ TEMPORARY: hardcoded to visualization for end-to-end testing
-    tool = "visualization"
-    logger.info("  🔀 Step 1: Tool HARDCODED to visualization (testing mode)")
-    # TODO: restore LLM tool selection after visualization pipeline is verified
-    # logger.info("  🔀 Step 1: Picking tool (LLM call 1)...")
-    # tool = "voice_call"  # default
-    # try:
-    #     tool_user_msg = TOOL_SELECTION_USER.format(
-    #         screen_details=screen_details,
-    #         topic=topic,
-    #         mastery=mastery_pct,
-    #         mastery_quality=mastery_quality,
-    #         trigger_reason=trigger_reason,
-    #         recent_observations=recent_obs,
-    #     )
-    #     tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
-    #     if '"visualization"' in tool_text:
-    #         tool = "visualization"
-    #     else:
-    #         tool = "voice_call"
-    #     logger.info(f"  🔀 Tool selected: {tool}  (Claude said: {tool_text[:80]})")
-    # except Exception as e:
-    #     logger.warning(f"  ⚠️ Tool selection failed, defaulting to voice_call: {e}")
-    #     tool = "voice_call"
+    logger.info("  🔀 Step 1: Picking tool (LLM call 1)...")
+    tool = "voice_call"  # default
+    try:
+        tool_user_msg = TOOL_SELECTION_USER.format(
+            screen_details=screen_details,
+            topic=topic,
+            mastery=mastery_pct,
+            mastery_quality=mastery_quality,
+            trigger_reason=trigger_reason,
+            recent_observations=recent_obs,
+        )
+        tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
+        if '"visualization"' in tool_text:
+            tool = "visualization"
+        else:
+            tool = "voice_call"
+        logger.info(f"  🔀 Tool selected: {tool}  (Claude said: {tool_text[:80]})")
+    except Exception as e:
+        logger.warning(f"  ⚠️ Tool selection failed, defaulting to voice_call: {e}")
+        tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
     content_type = "text"
