@@ -430,11 +430,14 @@ async def zoom_oauth_callback(code: str = Query(...)):
 async def realtime_config():
     """
     Get ephemeral key and instructions for OpenAI Realtime voice agent.
-    Requires OPENAI_API_KEY and REALTIME_INSTRUCTIONS in .env.
+    Requires OPENAI_API_KEY in .env. Optional: REALTIME_INSTRUCTIONS, REALTIME_VOICE.
+    Voice options: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar.
+    Shimmer and coral work well for a warm, teacher-like tone.
     """
     import os
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     instructions = os.environ.get("REALTIME_INSTRUCTIONS", "You are a helpful assistant.").strip()
+    voice = os.environ.get("REALTIME_VOICE", "shimmer").strip().lower() or "shimmer"
     if not api_key or api_key.startswith("paste_"):
         return {"error": "OPENAI_API_KEY not set. Add it to .env"}
     try:
@@ -443,7 +446,7 @@ async def realtime_config():
                 "type": "realtime",
                 "model": "gpt-realtime",
                 "instructions": instructions,
-                "audio": {"output": {"voice": "marin"}},
+                "audio": {"output": {"voice": voice}},
             }
         }
         async with httpx.AsyncClient() as client:

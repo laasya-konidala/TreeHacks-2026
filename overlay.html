@@ -288,7 +288,7 @@
       border-color: rgba(16, 185, 129, 0.5);
     }
 
-    /* ── Call footer (voice bars + Slide to call + Zoom) ── */
+    /* ── Call footer (voice bars + Slide to call + End conversation) ── */
     .call-footer {
       padding: 14px 20px 16px;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -389,21 +389,20 @@
       height: 22px;
       color: #10b981;
     }
-    .zoom-btns {
+    .end-conversation-row {
       display: flex;
-      gap: 8px;
+      justify-content: center;
     }
-    .zoom-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.06);
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 11px;
+    .end-conversation-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      font-size: 13px;
       cursor: pointer;
     }
-    .zoom-btn:hover { background: rgba(255, 255, 255, 0.12); }
-    .zoom-btn.connected { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); }
+    .end-conversation-btn:hover { background: rgba(239, 68, 68, 0.35); }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
@@ -465,9 +464,8 @@
           </div>
         </div>
       </div>
-      <div class="call-row zoom-btns">
-        <button class="zoom-btn" id="zoomConnectBtn">Connect Zoom</button>
-        <button class="zoom-btn" id="zoomResetBtn">New link</button>
+      <div class="call-row end-conversation-row" id="endConversationRow" style="display: none;">
+        <button class="end-conversation-btn" id="endConversationBtn">End conversation</button>
       </div>
     </div>
   </div>
@@ -507,6 +505,12 @@
             if (transcript) {
               console.log('[Speech]', transcript);
               window.api.sendSpeechTranscript(transcript);
+              if (pendingFirstVoiceResponse) {
+                pendingFirstVoiceResponse = false;
+                stopSpeechRecognition();
+                startRealtimeVoice();
+                if (endConversationRow) endConversationRow.style.display = 'flex';
+              }
             }
           }
         }
@@ -525,11 +529,10 @@
       };
 
       recognition.onend = () => {
-        // Auto-restart if session is still active
-        if (isActive) {
+        if (isActive && !realtimeSession) {
           try { recognition.start(); } catch (e) {}
         }
-        micIndicator.classList.toggle('listening', isActive);
+        micIndicator.classList.toggle('listening', isActive && !realtimeSession);
       };
 
       try {
@@ -804,8 +807,9 @@
     const slideToCallLabel = document.getElementById('slideToCallLabel');
     const voiceBarsRow = document.getElementById('voiceBarsRow');
     let pendingVoiceQuestion = null;
-    const zoomConnectBtn = document.getElementById('zoomConnectBtn');
-    const zoomResetBtn = document.getElementById('zoomResetBtn');
+    let pendingFirstVoiceResponse = false;
+    const endConversationRow = document.getElementById('endConversationRow');
+    const endConversationBtn = document.getElementById('endConversationBtn');
 
     let realtimeSession = null;
 
@@ -919,7 +923,10 @@
             const u = new SpeechSynthesisUtterance(toSpeak);
             u.onend = () => {
               if (voiceBarsRow) voiceBarsRow.classList.remove('speaking');
-              if (isActive && typeof startSpeechRecognition === 'function') startSpeechRecognition();
+              if (isActive && typeof startSpeechRecognition === 'function') {
+                pendingFirstVoiceResponse = true;
+                startSpeechRecognition();
+              }
             };
             speechSynthesis.speak(u);
           } else {
@@ -944,51 +951,13 @@
     window.api.onZoomMeetingClosed(() => {
       stopRealtimeVoice();
       slideToCallLabel.textContent = 'Slide to call';
+      if (endConversationRow) endConversationRow.style.display = 'none';
     });
 
-    async function checkZoomStatus() {
-      try {
-        const r = await fetch(`${BACKEND_URL}/zoom/status`);
-        const data = await r.json();
-        zoomConnectBtn.textContent = data.connected ? 'Zoom ✓' : 'Connect Zoom';
-        zoomConnectBtn.classList.toggle('connected', data.connected);
-        return data.connected;
-      } catch (e) {
-        zoomConnectBtn.textContent = 'Connect Zoom';
-        zoomConnectBtn.classList.remove('connected');
-        return false;
-      }
-    }
-
-    zoomConnectBtn.addEventListener('click', async () => {
-      if (await checkZoomStatus()) {
-        statusText.textContent = 'Zoom already connected';
-        return;
-      }
-      try {
-        const r = await fetch(`${BACKEND_URL}/zoom/auth`);
-        const data = await r.json();
-        if (data.url) {
-          window.api.openExternal(data.url);
-          statusText.textContent = 'Open the browser to connect Zoom...';
-          setTimeout(checkZoomStatus, 5000);
-        } else {
-          statusText.textContent = data.error || 'Zoom auth failed';
-        }
-      } catch (e) {
-        statusText.textContent = 'Could not get Zoom auth URL';
-      }
+    endConversationBtn.addEventListener('click', () => {
+      stopRealtimeVoice();
+      if (endConversationRow) endConversationRow.style.display = 'none';
     });
-
-    zoomResetBtn.addEventListener('click', async () => {
-      try {
-        await fetch(`${BACKEND_URL}/zoom/reset-meeting`, { method: 'POST' });
-        slideToCallLabel.textContent = 'Slide to call';
-        statusText.textContent = 'Meeting reset. Slide to call for a new link.';
-      } catch (e) {}
-    });
-
-    checkZoomStatus();
   </script>
 </body>
 </html>
