@@ -111,7 +111,7 @@ Rules:
 - NEVER use template literals (backticks). Use string concatenation with + instead: "translate(" + x + "," + y + ")" NOT `translate(${x},${y})`.
 - NEVER use arrow functions. Use function(d) { return d.x; } NOT d => d.x.
 - Keep code simple: basic D3 selections, .append(), .attr(), .text(), .style(). No complex ES6+ features.
-- Use d3.select(container) to start. Set explicit width/height on the SVG with .attr("width", ...) and .attr("height", ...).
+- Use d3.select(container) to start. Use var width = container.clientWidth || 280; for width (do NOT hardcode pixel widths). Set height proportionally (e.g. var height = width * 0.7;). Set both on the SVG with .attr("width", width).attr("height", height).attr("viewBox", "0 0 " + width + " " + height).
 - All colors as hex strings: "#3b82f6", not rgb() or rgba(). For transparent, use "none".
 - Avoid special Unicode characters in .text() calls — use only basic ASCII letters, numbers, and common punctuation.
 """
