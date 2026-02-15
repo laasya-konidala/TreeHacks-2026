@@ -223,9 +223,10 @@
     .viz-feed-card {
       margin-top: 4px;
       border-radius: 10px;
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid rgba(255, 255, 255, 0.12);
       background: rgba(255, 255, 255, 0.06);
+      padding: 12px;
     }
     .viz-feed-card .viz-title {
       font-size: 13px;
@@ -234,11 +235,17 @@
       margin-bottom: 6px;
     }
     .viz-feed-card .viz-canvas {
-      min-height: 80px;
+      min-height: 200px;
       background: rgba(0, 0, 0, 0.15);
       border-radius: 8px;
       padding: 10px;
       margin-bottom: 6px;
+      overflow: visible;
+    }
+    .viz-feed-card .viz-canvas svg {
+      width: 100%;
+      height: auto;
+      display: block;
     }
     .viz-feed-card .viz-narration {
       font-size: 12px;
@@ -595,7 +602,7 @@
         canvasEl.style.background = 'rgba(0,0,0,0.15)';
         canvasEl.style.borderRadius = '8px';
         canvasEl.style.padding = '8px';
-        canvasEl.style.overflow = 'hidden';
+        canvasEl.style.overflow = 'visible';
 
         console.log('[D3 render] d3 loaded:', !!window.d3, '| code length:', payload.code.length);
 

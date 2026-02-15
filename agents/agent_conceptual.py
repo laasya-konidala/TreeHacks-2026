@@ -59,21 +59,22 @@ TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a s
 
 You have 2 tools. Pick ONE based on the trigger reason, mastery, and what's on screen:
 
-"voice_call" — Start a spoken dialogue with the student. Use when:
-  - natural_pause + any mastery: talk through what they just saw
-  - stuck: ask a simpler guiding question to unstick them
-  - mode_change: bridge what they were doing to what they're doing now
-  - topic_transition: talk about the connection between old and new topic
-  - Low mastery: gentle check-in about the basics
-  - Medium mastery: ask them to talk through their reasoning
-  - High mastery: challenge them to explain an edge case or tradeoff
+"visualization" — Generate a diagram, chart, or interactive visual. STRONGLY PREFERRED. Use when:
+  - The content involves equations, formulas, or mathematical relationships
+  - There are abstract concepts that benefit from a concrete visual representation
+  - The student is reading/watching and a different modality would reinforce understanding
+  - The student is stuck and a visual could clarify the concept
+  - There are spatial, structural, or relational ideas (graphs, circuits, data structures, flows)
+  - You want to show how variables relate, how a process works, or what a concept looks like
+  - natural_pause: visualize what they just learned as a recap
+  - topic_transition: show how the new topic connects visually to the old one
 
-"visualization" — Suggest a diagram or mental model. Use when:
-  - The content is abstract (equations, theory, complex relationships)
-  - A visual would genuinely help more than a conversation
-  - The student has been reading/watching for a while and might benefit from a different angle
+"voice_call" — Start a spoken dialogue with the student. Use ONLY when:
+  - The concept is purely definitional and doesn't benefit from a visual
+  - You specifically want to quiz them verbally on recall
+  - The screen content is too vague to create a meaningful visualization
 
-Default to "voice_call" if unsure.
+Default to "visualization" if unsure — visuals are almost always more engaging and helpful.
 
 Respond with ONLY: {"tool": "voice_call|visualization", "reasoning": "brief reason"}"""
 
@@ -215,7 +216,7 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     else:
         # Let Claude decide based on context
         logger.info("  🔀 Step 1: Picking tool (LLM call 1)...")
-        tool = "voice_call"  # default
+        tool = "visualization"  # default — prefer visuals
         try:
             tool_user_msg = TOOL_SELECTION_USER.format(
                 screen_details=screen_details,
@@ -226,14 +227,14 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
                 recent_observations=recent_obs,
             )
             tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
-            if '"visualization"' in tool_text:
-                tool = "visualization"
-            else:
+            if '"voice_call"' in tool_text:
                 tool = "voice_call"
+            else:
+                tool = "visualization"
             logger.info(f"  🔀 Tool selected: {tool}  (Claude said: {tool_text[:80]})")
         except Exception as e:
-            logger.warning(f"  ⚠️ Tool selection failed, defaulting to voice_call: {e}")
-            tool = "voice_call"
+            logger.warning(f"  ⚠️ Tool selection failed, defaulting to visualization: {e}")
+            tool = "visualization"
 
     _tool_history.append(tool)
 

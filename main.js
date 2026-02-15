@@ -33,8 +33,8 @@ function createCharacter() {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().bounds;
 
   characterWindow = new BrowserWindow({
-    width: 100,
-    height: 100,
+    width: 130,
+    height: 130,
     x: screenWidth - 490,
     y: screenHeight - 140,
     frame: false,
@@ -78,6 +78,10 @@ ipcMain.on('toggle-sidebar', () => {
   sidebarVisible = !sidebarVisible;
   if (sidebarVisible) {
     sidebarWindow.show();
+    // Switch avatar back to rest when sidebar opens
+    if (characterWindow && !characterWindow.isDestroyed()) {
+      characterWindow.webContents.send('avatar-state', 'rest');
+    }
   } else {
     sidebarWindow.hide();
   }
@@ -249,6 +253,14 @@ async function analyzeScreen(base64Image, speechTranscript) {
             timestamp: Date.now(),
           });
         }
+        // Update ring color based on VLM-detected mode
+        if (mode && characterWindow && !characterWindow.isDestroyed()) {
+          const modeToAgent = { 'CONCEPTUAL': 'conceptual', 'APPLIED': 'applied', 'CONSOLIDATION': 'extension' };
+          const agentMode = modeToAgent[mode.toUpperCase()];
+          if (agentMode) {
+            characterWindow.webContents.send('agent-mode', agentMode);
+          }
+        }
       } catch (e) { /* ignore parse errors */ }
     }
   } catch (err) {
@@ -337,6 +349,16 @@ function connectAgentWebSocket() {
 
         if (sidebarWindow && !sidebarWindow.isDestroyed()) {
           sidebarWindow.webContents.send('agent-response', msg);
+        }
+
+        // Switch avatar to active animation whenever an agent response arrives
+        if (characterWindow && !characterWindow.isDestroyed()) {
+          characterWindow.webContents.send('avatar-state', 'active');
+        }
+
+        // Update ring color based on agent type
+        if (msg.agent_type && characterWindow && !characterWindow.isDestroyed()) {
+          characterWindow.webContents.send('agent-mode', msg.agent_type);
         }
       } catch (e) {
         console.warn('[AgentWS] Parse error:', e.message);

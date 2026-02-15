@@ -26,35 +26,82 @@
     }
 
     .avatar-container img {
-      width: 80px;
+      width: 110px;
       height: auto;
       pointer-events: none;
       filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
-      transition: transform 0.15s ease;
+      transition: transform 0.3s ease, filter 0.3s ease;
     }
 
     .avatar-container:active img {
       transform: scale(0.93);
     }
 
-    /* Pulse ring */
+    /* Active state — scale up avatar + glow */
+    .avatar-container.avatar-active img {
+      transform: scale(1.15);
+      filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.5)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+    }
+
+    .avatar-container.avatar-active {
+      background: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.2), 0 2px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Pulse ring — default green */
     .pulse-ring {
       position: absolute;
-      width: 80px;
-      height: 80px;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
       border: 2px solid rgba(51, 111, 58, 0.2);
       animation: pulse 2s ease-out infinite;
       pointer-events: none;
+      transition: border-color 0.4s ease, border-width 0.3s ease, width 0.3s ease, height 0.3s ease;
     }
 
     .pulse-ring.active {
       border-color: rgba(16, 185, 129, 0.4);
     }
 
+    /* Brighter, thicker, faster ring when active */
+    .pulse-ring.ring-active {
+      border-width: 3px;
+      width: 120px;
+      height: 120px;
+      animation: pulse-bright 1s ease-out infinite;
+    }
+
+    /* Agent mode ring colors */
+    .pulse-ring.mode-conceptual {
+      border-color: rgba(139, 92, 246, 0.6);
+    }
+    .pulse-ring.ring-active.mode-conceptual {
+      border-color: rgba(139, 92, 246, 1);
+    }
+
+    .pulse-ring.mode-applied {
+      border-color: rgba(59, 130, 246, 0.6);
+    }
+    .pulse-ring.ring-active.mode-applied {
+      border-color: rgba(59, 130, 246, 1);
+    }
+
+    .pulse-ring.mode-extension {
+      border-color: rgba(16, 185, 129, 0.6);
+    }
+    .pulse-ring.ring-active.mode-extension {
+      border-color: rgba(16, 185, 129, 1);
+    }
+
     @keyframes pulse {
       0% { transform: scale(1); opacity: 1; }
       100% { transform: scale(1.6); opacity: 0; }
+    }
+
+    @keyframes pulse-bright {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
     }
   </style>
 </head>
@@ -68,31 +115,103 @@
     const avatarImg = document.getElementById('avatarImg');
     const pulseRing = document.getElementById('pulseRing');
 
-    const FRAME_COUNT = 51;
+    // ── Frame sets ──
+    const REST_FRAME_COUNT = 102;  // plato_at_rest: _000 to _101
+    const ACTIVE_FRAME_COUNT = 51; // plato: _00 to _50
     const FRAME_RATE = 100;
 
-    // Build frame paths
-    const framePaths = [];
-    for (let i = 0; i < FRAME_COUNT; i++) {
-      const padded = String(i).padStart(2, '0');
-      framePaths.push(`learning-companion-extension/assets/plato/frame_${padded}.svg`);
+    // Build rest frame paths (plato_at_rest)
+    const restFramePaths = [];
+    for (let i = 0; i <= 101; i++) {
+      const padded = String(i).padStart(3, '0');
+      restFramePaths.push(`learning-companion-extension/assets/plato_at_rest/20260215_0251_01khg7z4fkf4pbs7cqr10hknmd_${padded}.svg`);
     }
 
-    // Preload
-    framePaths.forEach(p => { const img = new Image(); img.src = p; });
+    // Build active frame paths (plato)
+    const activeFramePaths = [];
+    for (let i = 0; i < ACTIVE_FRAME_COUNT; i++) {
+      const padded = String(i).padStart(2, '0');
+      activeFramePaths.push(`learning-companion-extension/assets/plato/frame_${padded}.svg`);
+    }
 
-    // Set initial frame
-    avatarImg.src = framePaths[0];
+    // Preload both sets
+    [...restFramePaths, ...activeFramePaths].forEach(p => { const img = new Image(); img.src = p; });
 
-    // Animate
+    // ── State ──
+    let avatarState = 'rest'; // 'rest' | 'active'
     let currentFrame = 0;
-    setInterval(() => {
-      currentFrame = (currentFrame + 1) % FRAME_COUNT;
-      avatarImg.src = framePaths[currentFrame];
-    }, FRAME_RATE);
+    let animationTimer = null;
+
+    function startAnimation() {
+      stopAnimation();
+      currentFrame = 0;
+      const frames = avatarState === 'active' ? activeFramePaths : restFramePaths;
+      avatarImg.src = frames[0];
+      animationTimer = setInterval(() => {
+        currentFrame++;
+        if (avatarState === 'active' && currentFrame >= frames.length) {
+          // Active animation finished — return to rest
+          avatarState = 'rest';
+          avatarContainer.classList.remove('avatar-active');
+          pulseRing.classList.remove('ring-active');
+          startAnimation();
+          return;
+        }
+        currentFrame = currentFrame % frames.length;
+        avatarImg.src = frames[currentFrame];
+      }, FRAME_RATE);
+    }
+
+    function stopAnimation() {
+      if (animationTimer) {
+        clearInterval(animationTimer);
+        animationTimer = null;
+      }
+    }
+
+    const avatarContainer = document.getElementById('avatarContainer');
+
+    function setAvatarState(newState) {
+      if (newState === 'active') {
+        // Always restart active animation, even if already active
+        avatarState = 'active';
+        avatarContainer.classList.add('avatar-active');
+        pulseRing.classList.add('ring-active');
+        startAnimation();
+        return;
+      }
+      if (newState === avatarState) return;
+      avatarState = newState;
+      avatarContainer.classList.remove('avatar-active');
+      pulseRing.classList.remove('ring-active');
+      startAnimation();
+    }
+
+    // Start with rest animation
+    startAnimation();
+
+    // ── Ring color ──
+    function setAgentMode(mode) {
+      pulseRing.classList.remove('mode-conceptual', 'mode-applied', 'mode-extension');
+      if (mode === 'conceptual') {
+        pulseRing.classList.add('mode-conceptual');
+      } else if (mode === 'applied') {
+        pulseRing.classList.add('mode-applied');
+      } else if (mode === 'extension') {
+        pulseRing.classList.add('mode-extension');
+      }
+    }
+
+    // ── IPC listeners ──
+    window.api.onAvatarState((state) => {
+      setAvatarState(state); // 'rest' or 'active'
+    });
+
+    window.api.onAgentMode((mode) => {
+      setAgentMode(mode); // 'conceptual', 'applied', or 'extension'
+    });
 
     // ── Drag + Click detection ──
-    // We handle window dragging manually so clicks still work.
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -111,7 +230,6 @@
       const dy = e.screenY - dragStartY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         dragMoved = true;
-        // Move the window by the delta
         window.api.moveWindow(dx, dy);
         dragStartX = e.screenX;
         dragStartY = e.screenY;
@@ -120,7 +238,6 @@
 
     document.addEventListener('mouseup', () => {
       if (isDragging && !dragMoved) {
-        // It was a click, not a drag
         window.api.toggleSidebar();
       }
       isDragging = false;
