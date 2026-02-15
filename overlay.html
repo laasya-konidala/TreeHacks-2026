@@ -439,18 +439,22 @@
       item.className = 'feed-item agent-response';
 
       const agentEmoji = {
-        deep_diver: '🧠', assessor: '⚡', visualizer: '🎨', orchestrator: '💡'
+        conceptual: '🧐', applied: '🔧', extension: '🚀', orchestrator: '💡'
       }[msg.agent_type] || '🤖';
 
       const agentLabel = {
-        deep_diver: 'Deep Diver', assessor: 'Assessor',
-        visualizer: 'Visualizer', orchestrator: 'Hint'
+        conceptual: 'Conceptual', applied: 'Applied',
+        extension: 'Extension', orchestrator: 'Hint'
       }[msg.agent_type] || msg.agent_type;
+
+      const toolEmoji = {
+        question: '❓', visualization: '🎨', review: '🔄', quiz: '📝'
+      }[msg.tool_used] || '';
 
       const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       item.innerHTML = `
-        <div class="time">${now} ${agentEmoji}<span class="agent-badge">${agentLabel}</span></div>
+        <div class="time">${now} ${agentEmoji}<span class="agent-badge">${agentLabel}</span> ${toolEmoji}</div>
         <div class="text">${escapeHtml(msg.content || '')}</div>
       `;
 
@@ -458,43 +462,36 @@
       feed.scrollTop = feed.scrollHeight;
     });
 
-    // ── Agent trigger indicator — fires on EVERY Gemini VLM output ──
-    let agentTriggerCount = 0;
+    // ── VLM observation updates (every ~3s) — show as subtle status ──
+    let observationCount = 0;
     window.api.onAgentTriggered((data) => {
-      agentTriggerCount++;
+      observationCount++;
       emptyState.style.display = 'none';
 
-      // ── Flash banner at the top ──
-      const existingFlash = document.querySelector('.agent-flash');
-      if (existingFlash) existingFlash.remove();
+      // Update agent display based on mode
+      if (data.mode) updateAgentDisplay(data.mode);
 
-      const flash = document.createElement('div');
-      flash.className = 'agent-flash';
-      flash.innerHTML = `🚨 AGENT TRIGGERED (#${agentTriggerCount})<div class="flash-detail">Topic: ${escapeHtml(data.topic)} — ${escapeHtml(data.activity || '')}</div>`;
-      document.body.appendChild(flash);
-
-      // Auto-remove the flash after 3 seconds
-      setTimeout(() => {
-        flash.style.animation = 'flashOut 0.3s ease forwards';
-        setTimeout(() => flash.remove(), 300);
-      }, 3000);
-
-      // ── Feed item ──
+      // Show as a subtle feed item (not a huge flash)
       const item = document.createElement('div');
-      item.className = 'feed-item agent-response';
+      const modeClass = data.mode ? `mode-${data.mode}` : '';
+      item.className = `feed-item ${modeClass}`;
 
       const now = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       item.innerHTML = `
-        <div class="time">${now} 🚨<span class="agent-badge">AGENT #${agentTriggerCount}</span></div>
-        <div class="text">📡 VLM → Agent triggered\n📚 Topic: ${escapeHtml(data.topic)}\n📋 ${escapeHtml(data.activity || 'analyzing screen')}</div>
+        <div class="time">${now} 👁️ observation #${observationCount}</div>
+        <div class="text">📚 ${escapeHtml(data.topic || 'detecting...')}\n📋 ${escapeHtml(data.activity || 'analyzing screen')}</div>
       `;
 
       feed.appendChild(item);
-      feed.scrollTop = feed.scrollHeight;
 
-      // ── Console log for visibility ──
-      console.log(`[AGENT TRIGGERED #${agentTriggerCount}]`, data.topic, data.activity);
+      // Keep max 30 items
+      const items = feed.querySelectorAll('.feed-item');
+      while (items.length > 30 && feed.children.length > 31) {
+        feed.removeChild(feed.children[1]);
+      }
+
+      feed.scrollTop = feed.scrollHeight;
     });
 
     window.api.onStatusUpdate((data) => {

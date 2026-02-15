@@ -1,12 +1,13 @@
 {
   "name": "learning-overlay",
   "version": "1.0.0",
-  "description": "Desktop overlay learning agent with Gemini VLM",
+  "description": "Desktop overlay learning agent with Claude VLM",
   "main": "main.js",
   "scripts": {
     "start": "unset ELECTRON_RUN_AS_NODE && electron ."
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@google/genai": "^1.41.0",
     "dotenv": "^16.4.7",
     "ws": "^8.19.0"

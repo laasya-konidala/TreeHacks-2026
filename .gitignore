@@ -22,5 +22,9 @@ Thumbs.db
 .env.*
 .env.local
 
+# Python
+__pycache__/
+*.pyc
+
 # Electron
 *.asar

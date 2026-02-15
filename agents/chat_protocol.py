@@ -4,11 +4,6 @@ Chat Protocol for ASI:One discovery.
 Uses uagents Dialogue with the proper Edge-based handler pattern.
 When ASI:One users discover this agent, they can chat with it directly.
 Every incoming message is treated as an explicit tutoring help request.
-
-Edge-based pattern:
-  1. Define Nodes (states)
-  2. Define Edges (transitions) with .model and .func set
-  3. Construct Dialogue (auto-registers handlers from edges)
 """
 import time
 import logging
@@ -41,48 +36,26 @@ class ChatEnd(Model):
     reason: str = "completed"
 
 
-# ─── Handler Functions (must be defined before Edge assignment) ───
+# ─── Handler Functions ───
 
 async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
     """Handle incoming chat from ASI:One users."""
     logger.info(f"ASI:One chat from {sender}: {msg.text[:100]}")
 
-    from agents.confusion_detector import ConfusionDetector
-    from agents.models import WorkContext
-
-    work_ctx = WorkContext(
-        screen_content=msg.text,
-        screen_content_type="text",
-        detected_topic="",
-        detected_subtopic="",
-        typing_speed_ratio=1.0,
-        deletion_rate=0.0,
-        pause_duration=0.0,
-        scroll_back_count=0,
-        user_touched_agent=True,
-        user_message=msg.text,
-        user_id=msg.user_id or sender,
-        session_id=f"asione_{sender}_{int(time.time())}",
-        timestamp=msg.timestamp or datetime.now().isoformat(),
-    )
-
-    detector = ConfusionDetector()
-    assessment = detector.score(work_ctx)
-
-    response_text = _generate_direct_response(msg.text, assessment.confusion_type)
+    response_text = _generate_direct_response(msg.text)
 
     await ctx.send(
         sender,
         ChatResponse(
             text=response_text,
             agent_type="orchestrator",
-            session_id=work_ctx.session_id,
+            session_id=f"asione_{sender}_{int(time.time())}",
         ),
     )
 
 
 async def handle_chat_response(ctx: Context, sender: str, msg: ChatResponse):
-    """Handle response acknowledgment (for dialogue state tracking)."""
+    """Handle response acknowledgment."""
     logger.info(f"Chat response sent to {sender}: {msg.text[:50]}...")
 
 
@@ -93,12 +66,10 @@ async def handle_chat_end(ctx: Context, sender: str, msg: ChatEnd):
 
 # ─── Dialogue State Machine ───
 
-# Nodes (states)
 default_node = Node(name="default", description="Idle — waiting for user", initial=True)
 chatting_node = Node(name="chatting", description="Active tutoring session")
 end_node = Node(name="end", description="Session completed")
 
-# Edges (transitions) — assign model + func BEFORE constructing Dialogue
 init_edge = Edge(
     name="start_chat",
     description="User initiates a tutoring request",
@@ -135,7 +106,6 @@ end_edge = Edge(
 end_edge.model = ChatEnd
 end_edge.func = handle_chat_end
 
-# Build the dialogue (auto-registers handlers from edges)
 chat_dialogue = Dialogue(
     name="ambient_learning_chat",
     version="0.1.0",
@@ -146,7 +116,7 @@ chat_dialogue = Dialogue(
 
 # ─── Helper ───
 
-def _generate_direct_response(user_text: str, confusion_type: str) -> str:
+def _generate_direct_response(user_text: str) -> str:
     """Generate a direct response for ASI:One chat users via Gemini."""
     try:
         from google import genai
@@ -172,8 +142,6 @@ def _generate_direct_response(user_text: str, confusion_type: str) -> str:
     except Exception as e:
         logger.error(f"Gemini API call failed for ASI:One chat: {e}")
         return (
-            f"I detected this as a {confusion_type.replace('_', ' ').lower()} question. "
             "I'd love to help, but I'm having trouble connecting to my AI backend. "
-            "Try again in a moment, or use the Chrome extension + Electron overlay "
-            "for the full ambient learning experience!"
+            "Try again in a moment!"
         )

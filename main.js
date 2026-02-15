@@ -2,13 +2,15 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { app, BrowserWindow, screen, desktopCapturer, ipcMain, systemPreferences } = require('electron');
 const WebSocket = require('ws');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // ─── Config ────────────────────────────────────────────────────────
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8080';
-const CAPTURE_INTERVAL_MS = 3000;
+const CAPTURE_INTERVAL_MS = 8000;   // 8s — balances cost vs responsiveness
 const CAPTURE_WIDTH = 1280;
 const CAPTURE_HEIGHT = 720;
+const VLM_MODEL = 'claude-haiku-4-5';  // cheap + fast for frequent VLM
 
 // ─── State ─────────────────────────────────────────────────────────
 let sidebarWindow = null;
@@ -16,9 +18,9 @@ let characterWindow = null;
 let sidebarVisible = false;
 let captureInterval = null;
 let sessionActive = false;
-let genai = null;       // GoogleGenAI instance
+let claude = null;       // Anthropic client
 let contextBuffer = []; // rolling buffer of recent observations
-const MAX_CONTEXT = 10; // keep last 10 observations
+const MAX_CONTEXT = 10;
 let agentWs = null;     // WebSocket to Python agent backend
 
 // ─── Create floating character window ───────────────────────────────
@@ -28,7 +30,7 @@ function createCharacter() {
   characterWindow = new BrowserWindow({
     width: 100,
     height: 100,
-    x: screenWidth - 490, // to the left of the sidebar
+    x: screenWidth - 490,
     y: screenHeight - 140,
     frame: false,
     transparent: true,
@@ -46,7 +48,6 @@ function createCharacter() {
 
   characterWindow.loadFile(path.join(__dirname, 'character.html'));
   characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  // Allow dragging but let clicks through transparent areas
   characterWindow.setIgnoreMouseEvents(false);
 }
 
@@ -97,53 +98,53 @@ function createSidebar() {
   sidebarWindow.setIgnoreMouseEvents(false);
 
   sidebarWindow.once('ready-to-show', () => {
-    sidebarWindow.hide(); // start hidden, click the cat to show
+    sidebarWindow.hide();
     sendStatus('ready', 'Click the toggle to start a session.');
   });
 }
 
-// ─── Gemini generateContent (regular API with vision) ──────────────
-const SYSTEM_PROMPT = `You are an intelligent learning assistant observing a user's screen via periodic screenshots.
+// ─── Claude Vision (screen analysis) ───────────────────────────────
+const SYSTEM_PROMPT = `You are an intelligent learning assistant observing a student's screen via periodic screenshots.
 
-Your job is to analyze each screenshot and output a concise JSON summary:
+Analyze each screenshot and output a concise JSON summary:
 {
-  "activity": "what the user is doing",
-  "topic": "subject/topic they are working on (e.g. gradient_descent, linear_algebra, calculus)",
+  "activity": "what the student is doing right now",
+  "topic": "subject/topic (e.g. eigenvalues, gradient_descent, photosynthesis)",
   "subtopic": "more specific sub-topic if identifiable",
   "mode": "CONCEPTUAL | APPLIED | CONSOLIDATION",
   "stuck": true/false,
   "work_status": "correct | incorrect | incomplete | unclear",
-  "content_type": "code | equation | text | diagram | mixed",
-  "confused_about": ["concept1", "concept2"],
-  "understands": ["concept3"],
+  "content_type": "code | equation | text | diagram | video | mixed",
   "error_description": null or "specific error if work is incorrect",
-  "notes": "any transitions, observations, or notable details"
+  "natural_pause": true/false,
+  "notes": "transitions, notable details, what changed since last frame"
 }
 
-Modes:
-- CONCEPTUAL: reading, watching lectures, understanding theory
-- APPLIED: solving problems, coding, practicing, doing exercises
+Modes (pick one based on what the student is DOING):
+- CONCEPTUAL: watching a video, reading notes/textbook, learning new theory
+- APPLIED: solving problems, writing code, doing exercises, practicing
 - CONSOLIDATION: reviewing notes, summarizing, making flashcards, organizing
 
+Timing cues — set natural_pause to true if:
+- A video appears paused
+- They just finished writing something and stopped
+- They scrolled to a new section/page
+- There's a clear transition between activities
+
 Also consider:
-- If you see the same content for multiple frames, they might be stuck or deeply reading
-- If content changes rapidly, they might be skimming or switching tasks
-- If there's a transcript of what they said, incorporate it into your analysis
+- Same content for multiple frames → deeply reading or stuck
+- Rapid content changes → skimming or switching tasks
+- If there's a transcript of what they said, incorporate it
 - Focus on WHAT CONCEPT they're working on and WHETHER THEIR WORK IS CORRECT
 
 Be concise. Only output the JSON, nothing else.`;
 
 async function analyzeScreen(base64Image, speechTranscript) {
-  if (!genai) return;
+  if (!claude) return;
 
   try {
-    const { GoogleGenAI } = await import('@google/genai');
-    if (!genai) genai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
-    const contents = [];
-
-    // Build the prompt with context
-    let promptText = 'Analyze this screenshot of the user\'s screen.';
+    // Build the user message with context
+    let promptText = 'Analyze this screenshot of the student\'s screen.';
 
     if (contextBuffer.length > 0) {
       promptText += '\n\nPrevious observations (most recent last):\n';
@@ -151,28 +152,35 @@ async function analyzeScreen(base64Image, speechTranscript) {
     }
 
     if (speechTranscript) {
-      promptText += `\n\nThe user just said: "${speechTranscript}"`;
+      promptText += `\n\nThe student just said: "${speechTranscript}"`;
     }
 
-    const response = await genai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
+    const response = await claude.messages.create({
+      model: VLM_MODEL,
+      max_tokens: 300,
+      system: SYSTEM_PROMPT,
+      messages: [{
         role: 'user',
-        parts: [
-          { text: SYSTEM_PROMPT + '\n\n' + promptText },
+        content: [
           {
-            inlineData: {
-              mimeType: 'image/jpeg',
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/jpeg',
               data: base64Image,
-            }
-          }
-        ]
+            },
+          },
+          {
+            type: 'text',
+            text: promptText,
+          },
+        ],
       }],
     });
 
-    const text = response.text || '';
+    const text = response.content[0]?.text || '';
     if (text) {
-      console.log('[Gemini]', text.substring(0, 200));
+      console.log('[Claude VLM]', text.substring(0, 200));
 
       // Add to rolling context buffer
       contextBuffer.push(text);
@@ -186,107 +194,83 @@ async function analyzeScreen(base64Image, speechTranscript) {
         });
       }
 
-      // ─── Feed Gemini analysis to the agent backend ───
+      // Feed analysis to the agent backend
       forwardToAgentBackend(text, speechTranscript);
 
-      // ─── ALWAYS trigger agent on every Gemini response ───
+      // Notify sidebar of VLM activity
       try {
         const jsonMatch2 = text.match(/\{[\s\S]*\}/);
         let topic = 'screen activity';
         let activity = 'analyzing';
-        let confused = [];
+        let mode = '';
         if (jsonMatch2) {
           const parsed = JSON.parse(jsonMatch2[0]);
           topic = parsed.topic || 'screen activity';
           activity = parsed.activity || 'analyzing';
-          confused = parsed.confused_about || [];
+          mode = parsed.mode || '';
         }
-        console.log('[Agent] TRIGGERED — VLM produced output');
+        console.log(`[VLM] ${mode} — ${topic}: ${activity}`);
         if (sidebarWindow && !sidebarWindow.isDestroyed()) {
           sidebarWindow.webContents.send('agent-triggered', {
             reason: 'vlm_output',
             topic: topic,
             activity: activity,
-            confused_about: confused,
+            mode: mode,
             timestamp: Date.now(),
           });
         }
       } catch (e) { /* ignore parse errors */ }
     }
   } catch (err) {
-    console.error('[Gemini] Error:', err.message);
-    // Don't spam error status for transient failures
-    if (err.message.includes('API key') || err.message.includes('quota')) {
-      sendStatus('error', `Gemini: ${err.message}`);
+    console.error('[Claude VLM] Error:', err.message || err);
+    if (err.message && (err.message.includes('API key') || err.message.includes('credit') || err.message.includes('rate'))) {
+      sendStatus('error', `Claude: ${err.message}`);
     }
   }
 }
 
 /**
- * Forward Gemini's structured analysis to the Python agent backend.
- * This replaces the Chrome extension's screenshot capture — Gemini is now
- * the VLM that feeds the confusion detector and agent routing.
+ * Forward Claude's structured analysis to the Python agent backend.
  */
-function forwardToAgentBackend(geminiText, speechTranscript) {
+function forwardToAgentBackend(vlmText, speechTranscript) {
   try {
-    // Parse Gemini's JSON response
-    const jsonMatch = geminiText.match(/\{[\s\S]*\}/);
+    const jsonMatch = vlmText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return;
 
     const analysis = JSON.parse(jsonMatch[0]);
 
-    // Build a WorkContext for the agent backend
     const ctx = {
-      // Gemini vision analysis fields
       screen_content: analysis.activity || '',
       screen_content_type: analysis.content_type || 'text',
       detected_topic: analysis.topic || '',
       detected_subtopic: analysis.subtopic || '',
 
-      // Gemini-specific fields (new)
       gemini_stuck: !!analysis.stuck,
       gemini_work_status: analysis.work_status || 'unclear',
-      gemini_confused_about: analysis.confused_about || [],
-      gemini_understands: analysis.understands || [],
       gemini_error: analysis.error_description || null,
       gemini_mode: analysis.mode || '',
       gemini_notes: analysis.notes || '',
+      gemini_natural_pause: !!analysis.natural_pause,
 
-      // Behavioral signals — not available from Electron screen capture,
-      // Chrome extension will merge these in separately
-      typing_speed_ratio: 1.0,
-      deletion_rate: 0.0,
-      pause_duration: 0.0,
-      scroll_back_count: 0,
-
-      // Verbal cues from speech transcript
-      verbal_confusion_cues: speechTranscript ? [speechTranscript] : [],
       audio_transcript: speechTranscript || null,
 
-      user_touched_agent: false,
-      user_message: null,
       user_id: 'default',
-      session_id: 'gemini_' + Date.now().toString(36),
+      session_id: 'claude_' + Date.now().toString(36),
       timestamp: new Date().toISOString(),
-
-      // No screenshot needed — Gemini already analyzed it
-      screenshot_b64: null,
     };
 
     fetch(`${BACKEND_URL}/context`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ctx),
-    }).catch(() => {
-      // Silent — backend not running is fine for the simple agent demo
-    });
+    }).catch(() => {});
 
   } catch (e) {
-    // Gemini response wasn't valid JSON — skip silently
+    // VLM response wasn't valid JSON — skip silently
   }
 }
 
-// ─── Agent Backend WebSocket (optional — connects if backend is running) ──
+// ─── Agent Backend WebSocket ────────────────────────────────────────
 function connectAgentWebSocket() {
   if (agentWs) {
     try { agentWs.close(); } catch (e) {}
@@ -305,7 +289,6 @@ function connectAgentWebSocket() {
         const msg = JSON.parse(data.toString());
         console.log(`[AgentWS] ${msg.agent_type}: ${(msg.content || '').substring(0, 100)}`);
 
-        // Forward agent response to overlay sidebar
         if (sidebarWindow && !sidebarWindow.isDestroyed()) {
           sidebarWindow.webContents.send('agent-response', msg);
         }
@@ -314,17 +297,9 @@ function connectAgentWebSocket() {
       }
     });
 
-    agentWs.on('close', () => {
-      agentWs = null;
-      // Don't spam reconnects — backend is optional for the simple demo
-    });
-
-    agentWs.on('error', () => {
-      // Silent — backend not running is fine for the simple agent trigger demo
-    });
-  } catch (e) {
-    // Silent — backend not running is fine
-  }
+    agentWs.on('close', () => { agentWs = null; });
+    agentWs.on('error', () => {});
+  } catch (e) {}
 }
 
 function disconnectAgentWebSocket() {
@@ -345,7 +320,7 @@ async function captureAndAnalyze() {
     });
 
     if (sources.length === 0) {
-      console.warn('[Capture] No screen sources found — is screen recording permission granted?');
+      console.warn('[Capture] No screen sources found');
       sendStatus('error', '⚠️ No screen sources. Grant Screen Recording permission in System Settings → Privacy & Security.');
       return;
     }
@@ -354,8 +329,8 @@ async function captureAndAnalyze() {
     const thumbnail = source.thumbnail;
 
     if (!thumbnail || thumbnail.isEmpty()) {
-      console.warn('[Capture] Empty thumbnail — screen recording permission likely not granted');
-      sendStatus('error', '⚠️ Screen capture returned empty. Grant Screen Recording permission in System Settings → Privacy & Security, then restart the app.');
+      console.warn('[Capture] Empty thumbnail');
+      sendStatus('error', '⚠️ Screen capture returned empty. Grant Screen Recording permission, then restart.');
       return;
     }
 
@@ -364,9 +339,8 @@ async function captureAndAnalyze() {
 
     console.log('[Capture] Frame grabbed (' + Math.round(jpegBuffer.length / 1024) + 'KB)');
 
-    // Send to Gemini for analysis
     const transcript = lastSpeechTranscript;
-    lastSpeechTranscript = ''; // consume it
+    lastSpeechTranscript = '';
     analyzeScreen(base64Image, transcript);
 
   } catch (err) {
@@ -378,7 +352,7 @@ async function captureAndAnalyze() {
 function startCapture() {
   captureAndAnalyze();
   captureInterval = setInterval(captureAndAnalyze, CAPTURE_INTERVAL_MS);
-  console.log(`[Capture] Started — every ${CAPTURE_INTERVAL_MS}ms`);
+  console.log(`[Capture] Started — every ${CAPTURE_INTERVAL_MS / 1000}s`);
 }
 
 function stopCapture() {
@@ -410,16 +384,16 @@ ipcMain.on('toggle-session', async () => {
       characterWindow.webContents.send('session-state', false);
     }
   } else {
-    // Initialize genai if needed
     try {
-      const { GoogleGenAI } = await import('@google/genai');
-      genai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      // Initialize Claude client
+      claude = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
       // Quick test call to validate the API key
-      sendStatus('connecting', 'Connecting to Gemini...');
-      await genai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }],
+      sendStatus('connecting', 'Connecting to Claude...');
+      await claude.messages.create({
+        model: VLM_MODEL,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say OK' }],
       });
 
       sendStatus('active', 'Session active — watching screen & listening.');
@@ -435,8 +409,8 @@ ipcMain.on('toggle-session', async () => {
         characterWindow.webContents.send('session-state', true);
       }
     } catch (err) {
-      console.error('[Session] Failed to start:', err.message);
-      sendStatus('error', `Failed to start: ${err.message}`);
+      console.error('[Session] Failed to start:', err.message || err);
+      sendStatus('error', `Failed to start: ${err.message || err}`);
     }
   }
 });
