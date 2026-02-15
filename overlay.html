@@ -17,7 +17,7 @@
       position: absolute;
       top: 16px;
       right: 16px;
-      bottom: 80px;
+      bottom: 16px;
       width: 340px;
       background: rgba(20, 20, 30, 0.85);
       backdrop-filter: blur(20px);
@@ -37,7 +37,7 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      cursor: grab;
+      -webkit-app-region: drag;
     }
 
     .header-left {
@@ -75,6 +75,7 @@
 
     /* ── Toggle button ── */
     .toggle-btn {
+      -webkit-app-region: no-drag;
       width: 40px;
       height: 24px;
       border-radius: 12px;
@@ -198,60 +199,6 @@
     .feed-item.mode-APPLIED { border-left: 2px solid rgba(59, 130, 246, 0.5); }
     .feed-item.mode-CONSOLIDATION { border-left: 2px solid rgba(16, 185, 129, 0.5); }
 
-    .feed-item.agent-response {
-      border-left: 2px solid rgba(239, 68, 68, 0.7);
-      background: rgba(239, 68, 68, 0.08);
-    }
-    .feed-item.agent-response .agent-badge {
-      display: inline-block;
-      font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(239, 68, 68, 0.15);
-      color: rgba(239, 68, 68, 0.9);
-      margin-left: 6px;
-      font-weight: 600;
-    }
-
-    /* ── Agent trigger flash banner ── */
-    .agent-flash {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      padding: 12px 20px;
-      background: linear-gradient(135deg, #ef4444, #f97316);
-      color: white;
-      font-weight: 700;
-      font-size: 14px;
-      text-align: center;
-      z-index: 9999;
-      animation: flashIn 0.3s ease, flashPulse 0.6s ease 0.3s 2;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
-    }
-    .agent-flash .flash-detail {
-      font-size: 11px;
-      font-weight: 400;
-      opacity: 0.9;
-      margin-top: 2px;
-      text-transform: none;
-      letter-spacing: 0;
-    }
-    @keyframes flashIn {
-      from { transform: translateY(-100%); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    @keyframes flashPulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-    @keyframes flashOut {
-      from { transform: translateY(0); opacity: 1; }
-      to { transform: translateY(-100%); opacity: 0; }
-    }
-
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -271,6 +218,38 @@
     }
 
     .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* ── Visualization cards ── */
+    .viz-feed-card {
+      margin-top: 4px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .viz-feed-card .viz-title {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.95);
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .viz-feed-card .viz-canvas {
+      min-height: 80px;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 6px;
+    }
+    .viz-feed-card .viz-narration {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      line-height: 1.4;
+    }
+    .viz-feed-card .katex { font-size: 1.05em; }
+    .viz-feed-card video {
+      width: 100%;
+      border-radius: 8px;
+    }
 
     /* ── Avatar dropdown ── */
     .avatar-row {
@@ -301,155 +280,11 @@
       outline: none;
       border-color: rgba(16, 185, 129, 0.5);
     }
-
-    /* ── Slide to call (footer) ── */
-    .call-footer {
-      padding: 16px 20px;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-      flex-shrink: 0;
-    }
-
-    .slide-to-call {
-      height: 48px;
-      border-radius: 24px;
-      background: rgba(255, 255, 255, 0.08);
-      position: relative;
-      cursor: default;
-      display: flex;
-      align-items: center;
-      overflow: hidden;
-      user-select: none;
-    }
-
-    .slide-to-call-track {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 0;
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 24px;
-      transition: width 0.15s ease-out;
-    }
-
-    .slide-to-call-thumb {
-      width: 44px;
-      height: 44px;
-      margin: 2px;
-      border-radius: 50%;
-      background: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: absolute;
-      left: 2px;
-      top: 2px;
-      z-index: 2;
-      cursor: grab;
-      flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-      transition: transform 0.1s ease;
-    }
-
-    .slide-to-call-thumb:active {
-      cursor: grabbing;
-      transform: scale(0.96);
-    }
-
-    .slide-to-call-thumb svg {
-      width: 22px;
-      height: 22px;
-      color: #1a1a1a;
-      pointer-events: none;
-    }
-
-    .slide-to-call-label {
-      position: absolute;
-      left: 0;
-      right: 0;
-      text-align: center;
-      color: rgba(255, 255, 255, 0.5);
-      font-size: 12px;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    /* ── In-call UI (voice speaking bars) ── */
-    .in-call-ui {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      padding: 16px 20px;
-    }
-
-    .in-call-ui.visible {
-      display: flex;
-    }
-
-    .voice-bars {
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      gap: 6px;
-      height: 32px;
-    }
-
-    .voice-bar {
-      width: 4px;
-      min-height: 8px;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 2px;
-      animation: voicePulse 0.6s ease-in-out infinite alternate;
-    }
-
-    .voice-bar:nth-child(1) { animation-delay: 0s; }
-    .voice-bar:nth-child(2) { animation-delay: 0.1s; }
-    .voice-bar:nth-child(3) { animation-delay: 0.2s; }
-    .voice-bar:nth-child(4) { animation-delay: 0.15s; }
-    .voice-bar:nth-child(5) { animation-delay: 0.05s; }
-    .voice-bar:nth-child(6) { animation-delay: 0.25s; }
-    .voice-bar:nth-child(7) { animation-delay: 0.1s; }
-
-    @keyframes voicePulse {
-      from { height: 8px; opacity: 0.6; }
-      to { height: 28px; opacity: 1; }
-    }
-
-    .in-call-label {
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 12px;
-    }
-
-    .end-call-btn {
-      width: 56px;
-      height: 56px;
-      border: none;
-      border-radius: 50%;
-      background: #ef4444;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
-      box-shadow: 0 2px 12px rgba(239, 68, 68, 0.4);
-    }
-
-    .end-call-btn:hover {
-      background: #dc2626;
-      transform: scale(1.05);
-    }
-
-    .end-call-btn:active {
-      transform: scale(0.96);
-    }
-
-    .end-call-btn svg {
-      width: 26px;
-      height: 26px;
-    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
   <div class="panel">
@@ -457,8 +292,8 @@
       <label for="avatarSelect" class="avatar-label">Avatar</label>
       <select id="avatarSelect" class="avatar-select" title="Choose avatar">
         <option value="plato">Plato</option>
-        <option value="einstein">Einstein</option>
-        <option value="darwin">Darwin</option>
+        <option value="socrates">Einstein</option>
+        <option value="einstein">Darwin</option>
       </select>
     </div>
     <div class="header">
@@ -484,35 +319,6 @@
         <div>Toggle the switch to start.<br>I'll watch your screen and listen<br>to understand what you're learning.</div>
       </div>
     </div>
-
-    <div class="call-footer">
-      <div class="in-call-ui" id="inCallUI">
-        <div class="voice-bars" aria-hidden="true">
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-          <div class="voice-bar"></div>
-        </div>
-        <span class="in-call-label">Speaking…</span>
-        <button class="end-call-btn" id="endCallBtn" title="End call">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-          </svg>
-        </button>
-      </div>
-      <div class="slide-to-call" id="slideToCall">
-        <div class="slide-to-call-track" id="slideTrack"></div>
-        <div class="slide-to-call-thumb" id="slideThumb">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-          </svg>
-        </div>
-        <span class="slide-to-call-label">Slide to call agent</span>
-      </div>
-    </div>
   </div>
 
   <script>
@@ -525,87 +331,8 @@
     const agentIcon = document.getElementById('agentIcon');
     const agentName = document.getElementById('agentName');
     const agentMode = document.getElementById('agentMode');
-    const header = document.querySelector('.header');
 
     let isActive = false;
-
-    // ── Manual drag for header (moves cat + sidebar together) ──
-    let headerDragging = false;
-    let headerStartX = 0;
-    let headerStartY = 0;
-
-    header.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.toggle-btn') || e.target.closest('.call-footer')) return;
-      headerDragging = true;
-      headerStartX = e.screenX;
-      headerStartY = e.screenY;
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!headerDragging) return;
-      const dx = e.screenX - headerStartX;
-      const dy = e.screenY - headerStartY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        window.api.moveWindow(dx, dy);
-        headerStartX = e.screenX;
-        headerStartY = e.screenY;
-      }
-    });
-
-    document.addEventListener('mouseup', () => {
-      headerDragging = false;
-    });
-
-    // ── Slide to call (design only, no functionality yet) ──
-    const slideToCall = document.getElementById('slideToCall');
-    const slideThumb = document.getElementById('slideThumb');
-    const slideTrack = document.getElementById('slideTrack');
-    let slideDragging = false;
-    let slideStartX = 0;
-    let slideThumbStartX = 0;
-
-    slideThumb.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      slideDragging = true;
-      slideStartX = e.clientX;
-      slideThumbStartX = slideThumb.offsetLeft;
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!slideDragging) return;
-      const trackWidth = slideToCall.offsetWidth - slideThumb.offsetWidth - 4;
-      let newLeft = slideThumbStartX + (e.clientX - slideStartX);
-      newLeft = Math.max(2, Math.min(trackWidth, newLeft));
-      slideThumb.style.left = newLeft + 'px';
-      slideTrack.style.width = newLeft + 'px';
-    });
-
-    const inCallUI = document.getElementById('inCallUI');
-    const endCallBtn = document.getElementById('endCallBtn');
-
-    document.addEventListener('mouseup', () => {
-      if (slideDragging) {
-        const trackWidth = slideToCall.offsetWidth - slideThumb.offsetWidth - 4;
-        const threshold = trackWidth * 0.75;
-        if (slideThumb.offsetLeft >= threshold) {
-          slideThumb.style.left = trackWidth + 'px';
-          slideTrack.style.width = trackWidth + 'px';
-          slideToCall.style.display = 'none';
-          inCallUI.classList.add('visible');
-        } else {
-          slideThumb.style.left = '2px';
-          slideTrack.style.width = '0px';
-        }
-        slideDragging = false;
-      }
-    });
-
-    endCallBtn.addEventListener('click', () => {
-      inCallUI.classList.remove('visible');
-      slideToCall.style.display = 'flex';
-      slideThumb.style.left = '2px';
-      slideTrack.style.width = '0px';
-    });
 
     // ── Speech Recognition (Web Speech API — runs locally) ──
     let recognition = null;
@@ -680,6 +407,138 @@
     window.api.onStartMic(() => startSpeechRecognition());
     window.api.onStopMic(() => stopSpeechRecognition());
 
+    // ── Visualization rendering ──
+    const BACKEND_ORIGIN = 'http://localhost:8080';
+
+    function renderVizInCard(tier, payload, canvasEl) {
+      if (!canvasEl) return;
+
+      // LaTeX
+      if (tier === 'latex' || (tier === 'static' && (payload.format || 'latex') === 'latex')) {
+        var content = payload.content || '';
+        if (window.katex) {
+          canvasEl.innerHTML = '';
+          var wrap = document.createElement('div');
+          canvasEl.appendChild(wrap);
+          try {
+            katex.render(content, wrap, { throwOnError: false, displayMode: true });
+          } catch (e) {
+            wrap.innerHTML = '<pre style="color:#9ca3af;">' + escapeHtml(content) + '</pre>';
+          }
+        } else {
+          canvasEl.innerHTML = '<pre style="color:#9ca3af;">' + escapeHtml(content) + '</pre>';
+        }
+        return;
+      }
+
+      // Mermaid (static with format=mermaid)
+      if (tier === 'static' && payload.format === 'mermaid') {
+        var content = payload.content || '';
+        if (window.mermaid) {
+          canvasEl.innerHTML = '<div class="mermaid">' + escapeHtml(content) + '</div>';
+          mermaid.run({ nodes: [canvasEl.querySelector('.mermaid')] }).catch(function() {});
+        } else {
+          canvasEl.innerHTML = '<pre style="color:#9ca3af;">' + escapeHtml(content) + '</pre>';
+        }
+        return;
+      }
+
+      // D3 (sandboxed iframe)
+      if (tier === 'd3' && payload.code) {
+        var code = payload.code.replace(/<\/script/gi, '<\\/script');
+        var html = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+          '<script src="https://d3js.org/d3.v7.min.js"><\\/script>' +
+          '<style>body{margin:0;background:transparent;}</style></head>' +
+          '<body><div id="v"></div><script>' + code +
+          '; if (typeof draw === "function") draw(document.getElementById("v"));<\\/script></body></html>';
+        var iframe = document.createElement('iframe');
+        iframe.setAttribute('sandbox', 'allow-scripts');
+        iframe.style.cssText = 'width:100%;height:200px;border:0;border-radius:8px;';
+        iframe.srcdoc = html;
+        canvasEl.innerHTML = '';
+        canvasEl.appendChild(iframe);
+        return;
+      }
+
+      // Plotly
+      if ((tier === 'plotly' || tier === 'interactive') && payload.plotly_figure && window.Plotly) {
+        canvasEl.innerHTML = '';
+        Plotly.newPlot(canvasEl, payload.plotly_figure.data || [], payload.plotly_figure.layout || {}, { responsive: true });
+        return;
+      }
+
+      // Manim — poll for rendered video
+      if (tier === 'manim') {
+        var statusUrl = payload.status_url;
+        var narrationText = payload.narration || 'Rendering animation...';
+
+        if (statusUrl) {
+          canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;">🎬 ' + escapeHtml(narrationText) + '</p>' +
+            '<p style="color:rgba(255,255,255,0.4);font-size:11px;text-align:center;">Rendering...</p>';
+          var polls = 0, maxPolls = 80;
+          var iv = setInterval(function() {
+            polls++;
+            fetch(BACKEND_ORIGIN + statusUrl).then(function(r) { return r.json(); }).then(function(data) {
+              if (data.status === 'ready' && data.url) {
+                clearInterval(iv);
+                canvasEl.innerHTML = '<video src="' + BACKEND_ORIGIN + data.url + '" controls playsinline autoplay muted style="width:100%;border-radius:8px;"></video>';
+              } else if (data.status === 'error') {
+                clearInterval(iv);
+                canvasEl.innerHTML = '<p style="color:#ef4444;text-align:center;font-size:12px;">' + escapeHtml(data.error || 'Render failed') + '</p>';
+              }
+            }).catch(function() {});
+            if (polls >= maxPolls) {
+              clearInterval(iv);
+              canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;">Render timed out.</p>';
+            }
+          }, 2000);
+        } else {
+          canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;">🎬 ' + escapeHtml(narrationText) + '</p>';
+        }
+        return;
+      }
+
+      // Fallback
+      canvasEl.innerHTML = '<p style="color:#6b7280;">' + escapeHtml(payload.title || 'Visualization') + '</p>';
+    }
+
+    // ── Agent responses from backend (via WebSocket → main → IPC) ──
+    window.api.onAgentResponse((msg) => {
+      emptyState.style.display = 'none';
+
+      const meta = msg.metadata || {};
+      const tier = meta.tier;
+      const vizPayload = meta.visualization || meta.scene || {};
+      const isViz = msg.content_type === 'visualization' || (msg.tool_used === 'visualization' && (tier || vizPayload.tier));
+
+      if (isViz && (tier || vizPayload.tier)) {
+        const actualTier = tier || vizPayload.tier;
+        const cardId = 'viz-' + Date.now();
+        const item = document.createElement('div');
+        item.className = 'feed-item viz-feed-card';
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        item.innerHTML = '<div class="time">' + now + ' 🎨 ' + actualTier + '</div>' +
+          '<div class="viz-title">' + escapeHtml(vizPayload.title || 'Visualization') + '</div>' +
+          '<div class="viz-canvas" id="' + cardId + '"></div>' +
+          '<div class="viz-narration">' + escapeHtml(msg.content || vizPayload.narration || '') + '</div>';
+        feed.appendChild(item);
+        feed.scrollTop = feed.scrollHeight;
+        const canvas = document.getElementById(cardId);
+        if (canvas) setTimeout(function() { renderVizInCard(actualTier, vizPayload, canvas); }, 50);
+        return;
+      }
+
+      // Non-visualization agent response
+      const agentLabel = { conceptual: 'Conceptual', applied: 'Applied', extension: 'Extension', visualizer: 'Visualizer' }[msg.agent_type] || msg.agent_type || 'Agent';
+      const item = document.createElement('div');
+      item.className = 'feed-item';
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      item.innerHTML = '<div class="time">' + now + ' 🤖 ' + escapeHtml(agentLabel) + '</div>' +
+        '<div class="text">' + escapeHtml(msg.content || '') + '</div>';
+      feed.appendChild(item);
+      feed.scrollTop = feed.scrollHeight;
+    });
+
     window.api.onGeminiResponse((data) => {
       emptyState.style.display = 'none';
 
@@ -716,69 +575,6 @@
       item.innerHTML = `
         <div class="time">${timeStr}</div>
         <div class="text">${escapeHtml(displayText)}</div>
-      `;
-
-      feed.appendChild(item);
-
-      // Keep max 30 items
-      const items = feed.querySelectorAll('.feed-item');
-      while (items.length > 30 && feed.children.length > 31) {
-        feed.removeChild(feed.children[1]);
-      }
-
-      feed.scrollTop = feed.scrollHeight;
-    });
-
-    // ── Agent responses from Python backend (via WebSocket → main → IPC) ──
-    window.api.onAgentResponse((msg) => {
-      emptyState.style.display = 'none';
-
-      const item = document.createElement('div');
-      item.className = 'feed-item agent-response';
-
-      const agentEmoji = {
-        conceptual: '🧐', applied: '🔧', extension: '🚀', orchestrator: '💡'
-      }[msg.agent_type] || '🤖';
-
-      const agentLabel = {
-        conceptual: 'Conceptual', applied: 'Applied',
-        extension: 'Extension', orchestrator: 'Hint'
-      }[msg.agent_type] || msg.agent_type;
-
-      const toolEmoji = {
-        question: '❓', visualization: '🎨', review: '🔄', quiz: '📝'
-      }[msg.tool_used] || '';
-
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-      item.innerHTML = `
-        <div class="time">${now} ${agentEmoji}<span class="agent-badge">${agentLabel}</span> ${toolEmoji}</div>
-        <div class="text">${escapeHtml(msg.content || '')}</div>
-      `;
-
-      feed.appendChild(item);
-      feed.scrollTop = feed.scrollHeight;
-    });
-
-    // ── VLM observation updates (every ~3s) — show as subtle status ──
-    let observationCount = 0;
-    window.api.onAgentTriggered((data) => {
-      observationCount++;
-      emptyState.style.display = 'none';
-
-      // Update agent display based on mode
-      if (data.mode) updateAgentDisplay(data.mode);
-
-      // Show as a subtle feed item (not a huge flash)
-      const item = document.createElement('div');
-      const modeClass = data.mode ? `mode-${data.mode}` : '';
-      item.className = `feed-item ${modeClass}`;
-
-      const now = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-      item.innerHTML = `
-        <div class="time">${now} 👁️ observation #${observationCount}</div>
-        <div class="text">📚 ${escapeHtml(data.topic || 'detecting...')}\n📋 ${escapeHtml(data.activity || 'analyzing screen')}</div>
       `;
 
       feed.appendChild(item);

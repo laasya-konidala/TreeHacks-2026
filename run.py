@@ -81,6 +81,7 @@ if __name__ == "__main__":
     print(f"  WebSocket:     ws://localhost:{BACKEND_PORT}/ws")
     print(f"  Health:        http://localhost:{BACKEND_PORT}/health")
     print("=" * 64)
+    print(f"  Routing: CONCEPTUAL → conceptual | APPLIED → applied | CONSOLIDATION → extension")
     print(f"  Agentverse:    {'ENABLED — agents will register' if AGENTVERSE_ENABLED else 'disabled (local only)'}")
     if AGENTVERSE_ENABLED:
         print(f"  ASI:One:       Orchestrator discoverable via Chat Protocol")
