@@ -553,7 +553,7 @@
     window.api.onStopMic(() => { /* disabled */ });
 
     // ── Visualization rendering ──
-    const BACKEND_ORIGIN = 'http://localhost:8080';
+    const BACKEND_ORIGIN = 'http://localhost:3000';
 
     function renderVizInCard(tier, payload, canvasEl) {
       if (!canvasEl) return;
@@ -782,7 +782,7 @@
     }
 
     // ── Zoom & Realtime voice (call footer) ──
-    const BACKEND_URL = 'http://localhost:8080';
+    const BACKEND_URL = 'http://localhost:3000';
     const slideToCallTrack = document.getElementById('slideToCallTrack');
     const slideToCallThumb = document.getElementById('slideToCallThumb');
     const slideToCallLabel = document.getElementById('slideToCallLabel');

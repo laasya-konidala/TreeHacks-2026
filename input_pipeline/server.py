@@ -3,7 +3,7 @@ FastAPI server — context ingestion, WebSocket broadcast, reply forwarding.
 Merges data from two sources:
   1. Electron/Gemini VLM (screen analysis: topic, stuck, work_status, confusion)
   2. Chrome extension (behavioral: typing speed, deletions, pauses, scroll-back)
-Runs on port 8080.
+Runs on BACKEND_PORT from config (default 3000).
 Also: Zoom OAuth and meeting creation.
 """
 from pathlib import Path

@@ -58,7 +58,7 @@ def get_authorize_url() -> str:
     User will sign in to Zoom and be redirected back to our callback.
     """
     client_id = os.environ.get("ZOOM_CLIENT_ID", "")
-    redirect_uri = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:8080/zoom/oauth/callback")
+    redirect_uri = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:3000/zoom/oauth/callback")
     if not client_id:
         raise ValueError("ZOOM_CLIENT_ID not set")
     params = {
@@ -78,7 +78,7 @@ def exchange_code_for_tokens(code: str) -> dict:
     """
     client_id = os.environ.get("ZOOM_CLIENT_ID", "")
     client_secret = os.environ.get("ZOOM_CLIENT_SECRET", "")
-    redirect_uri = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:8080/zoom/oauth/callback")
+    redirect_uri = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:3000/zoom/oauth/callback")
     if not client_id or not client_secret:
         raise ValueError("ZOOM_CLIENT_ID and ZOOM_CLIENT_SECRET must be set")
 

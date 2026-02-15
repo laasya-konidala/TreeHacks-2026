@@ -8,7 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 // ─── Config ────────────────────────────────────────────────────────
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8080';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 const CAPTURE_INTERVAL_MS = 8000;   // 8s — balances cost vs responsiveness
 const CAPTURE_WIDTH = 1280;
 const CAPTURE_HEIGHT = 720;
@@ -321,7 +321,8 @@ function connectAgentWebSocket() {
   }
 
   try {
-    agentWs = new WebSocket(`ws://localhost:8080/ws`);
+    const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + (BACKEND_URL.endsWith('/') ? '' : '') + '/ws';
+    agentWs = new WebSocket(wsUrl);
 
     agentWs.on('open', () => {
       console.log('[AgentWS] Connected to agent backend');

@@ -23,8 +23,8 @@ import httpx
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-BACKEND = "http://localhost:8080"
-WS_URL = "ws://localhost:8080/ws"
+BACKEND = "http://localhost:3000"
+WS_URL = "ws://localhost:3000/ws"
 
 # ─── Helpers ───
 

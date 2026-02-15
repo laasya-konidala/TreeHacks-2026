@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import logging
+import os
 import threading
 
 from dotenv import load_dotenv
@@ -47,10 +48,14 @@ def start_api():
 
 
 if __name__ == "__main__":
-    # Start FastAPI in background thread
-    api_thread = threading.Thread(target=start_api, daemon=True)
-    api_thread.start()
-    logger.info(f"API server starting on http://localhost:{BACKEND_PORT}")
+    # Start FastAPI in background thread unless server is already running elsewhere (e.g. terminal 1)
+    skip_api = os.environ.get("SKIP_API", "").lower() in ("1", "true", "yes")
+    if not skip_api:
+        api_thread = threading.Thread(target=start_api, daemon=True)
+        api_thread.start()
+        logger.info(f"API server starting on http://localhost:{BACKEND_PORT}")
+    else:
+        logger.info(f"SKIP_API=1: not starting API (expect server at http://localhost:{BACKEND_PORT})")
 
     # Import agents
     from agents.orchestrator import orchestrator

@@ -4,7 +4,7 @@
  * Electron app via Gemini VLM, so we only send behavioral data here.
  */
 
-const BACKEND_URL = 'http://localhost:8080';
+const BACKEND_URL = 'http://localhost:3000';
 let latestSignals = null;
 
 // ─── Receive signals from content script ───

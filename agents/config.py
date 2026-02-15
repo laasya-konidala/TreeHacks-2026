@@ -27,7 +27,7 @@ VISUALIZER_PORT = 8006
 
 # ─── API Configuration ───
 BACKEND_HOST = "0.0.0.0"
-BACKEND_PORT = 8080
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "3000"))
 BACKEND_URL = f"http://localhost:{BACKEND_PORT}"
 
 # ─── Gemini (VLM — screen analysis in Electron) ───
@@ -49,7 +49,7 @@ FET_USE_TESTNET = os.environ.get("FET_USE_TESTNET", "true").lower() == "true"
 # ─── Zoom (Meeting SDK, OAuth) ───
 ZOOM_CLIENT_ID = os.environ.get("ZOOM_CLIENT_ID", "")
 ZOOM_CLIENT_SECRET = os.environ.get("ZOOM_CLIENT_SECRET", "")
-ZOOM_REDIRECT_URI = os.environ.get("ZOOM_REDIRECT_URI", "http://localhost:8080/zoom/oauth/callback")
+ZOOM_REDIRECT_URI = os.environ.get("ZOOM_REDIRECT_URI", f"{BACKEND_URL}/zoom/oauth/callback")
 
 # ─── Prompting Timing ───
 MIN_SECONDS_BETWEEN_PROMPTS = 30    # don't spam
