@@ -12,6 +12,7 @@ through a "how are you approaching this problem?" lens, and help them think thro
 
 LLM: Claude (via Anthropic API) for high-quality exercise generation.
 """
+import json
 import logging
 import anthropic
 from uagents import Agent, Context
@@ -54,14 +55,24 @@ claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 # The framing should be problem-solving oriented — e.g., "the student
 # is actively working on something, how do we best support them?"
 #
-TOOL_SELECTION_SYSTEM = """<INSERT TOOL SELECTION SYSTEM PROMPT — e.g., You are a learning
-assistant deciding HOW to help a student who is actively solving a problem.
-Consider whether they need to talk through their approach or see the
-problem from a different angle.>
+TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is actively solving a problem.
 
 Pick the BEST tool to use right now. Choose ONE:
-- "voice_call": Initiate a spoken dialogue with the student to talk through their problem-solving approach
-- "visualization": Suggest a way to visualize/diagram the problem to unblock their thinking
+
+"visualization" — Generate a diagram or interactive visual. STRONGLY PREFERRED. Use when:
+  - The problem involves equations, diagrams, circuits, data structures, or spatial reasoning
+  - A visual could show the problem setup, forces, variables, or relationships
+  - The student is stuck and seeing the problem drawn out would help
+  - You can diagram their current approach or show where they went wrong
+  - The problem has multiple steps that benefit from a visual breakdown
+  - There are graphs, geometric shapes, code flows, or state diagrams involved
+
+"voice_call" — Start a spoken dialogue. Use ONLY when:
+  - The problem is purely verbal/definitional and doesn't benefit from a visual
+  - You specifically want to ask about their strategy or thought process with no visual component
+  - The screen content is too vague to create a meaningful visualization
+
+Default to "visualization" if unsure — visuals help students see the problem from a new angle.
 
 Respond with ONLY a JSON object:
 {"tool": "voice_call|visualization", "reasoning": "why this tool right now"}"""
@@ -157,8 +168,16 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
 
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
+    # Extract screen details for visualization
+    screen_details = vlm_text
+    try:
+        _data = json.loads(vlm_text) if vlm_text else {}
+        screen_details = _data.get("gemini_screen_details", "") or _data.get("screen_content", "") or vlm_text
+    except Exception:
+        pass
+
     # Step 1: Pick the best tool
-    tool = "voice_call"  # default
+    tool = "visualization"  # default — prefer visuals
     try:
         tool_user_msg = TOOL_SELECTION_USER.format(
             vlm_context=vlm_text,
@@ -171,41 +190,85 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
 
         tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
 
-        if '"visualization"' in tool_text:
-            tool = "visualization"
-        else:
+        if '"voice_call"' in tool_text:
             tool = "voice_call"
+        else:
+            tool = "visualization"
 
         logger.info(f"[Applied] Selected tool: {tool}")
 
     except Exception as e:
-        logger.warning(f"[Applied] Tool selection failed, defaulting to voice_call: {e}")
-        tool = "voice_call"
+        logger.warning(f"[Applied] Tool selection failed, defaulting to visualization: {e}")
+        tool = "visualization"
 
     # Step 2: Generate the exercise using the selected tool
-    try:
-        system_prompt, user_template = TOOL_PROMPTS[tool]
-        exercise_user_msg = user_template.format(
-            vlm_context=vlm_text,
-            topic=topic,
-            mastery=mastery_pct,
-            speech_context=speech_context,
-        )
+    content_type = "text"
+    metadata = None
 
-        content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
-        logger.info(f"[Applied] Generated: {content[:100]}")
+    if tool == "visualization":
+        # ── Full visualization pipeline via tool_visualization.py ──
+        logger.info(f"[Applied] Generating visualization...")
+        try:
+            from agents.tools.tool_visualization import generate_visualization
 
-    except Exception as e:
-        logger.error(f"[Applied] Exercise generation failed: {e}")
-        content = "I wanted to help you think through this problem, but hit a snag. Keep working — you've got this!"
+            mode_to_framing = {
+                "CONCEPTUAL": "conceptual",
+                "APPLIED": "applied",
+                "CONSOLIDATION": "extension",
+            }
+            framing = mode_to_framing.get(
+                (msg.vlm_context.mode or "").upper(), "applied"
+            )
+
+            viz_result = generate_visualization(
+                concept=topic,
+                subconcept=msg.vlm_context.subtopic or "",
+                confusion_hypothesis=msg.vlm_context.error_description or "",
+                screen_context=screen_details,
+                student_question="",
+                session_id=msg.session_id,
+                framing=framing,
+                mastery_pct=mastery_pct,
+            )
+
+            content = viz_result.get("content", "")
+            content_type = viz_result.get("content_type", "visualization")
+            metadata = viz_result.get("metadata")
+            tier = (metadata or {}).get("tier", "?")
+            logger.info(f"[Applied] Visualization generated — tier: {tier}")
+
+        except Exception as e:
+            logger.error(f"[Applied] Visualization generation failed: {e}")
+            content = "I wanted to show you a visualization, but ran into an issue. Keep going!"
+            content_type = "text"
+            metadata = None
+    else:
+        # ── voice_call ──
+        try:
+            system_prompt, user_template = TOOL_PROMPTS[tool]
+            exercise_user_msg = user_template.format(
+                vlm_context=vlm_text,
+                topic=topic,
+                mastery=mastery_pct,
+                speech_context=speech_context,
+            )
+
+            content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
+            logger.info(f"[Applied] Generated: {content[:100]}")
+
+        except Exception as e:
+            logger.error(f"[Applied] Exercise generation failed: {e}")
+            content = "I wanted to help you think through this problem, but hit a snag. Keep working — you've got this!"
 
     # ── Step 3: Send response back to orchestrator (same for every agent) ──
     response = AgentResponse(
         agent_type="applied",
         content=content,
+        content_type=content_type,
         tool_used=tool,
         topic=topic,
         mastery=msg.mastery,
+        metadata=metadata,
     )
 
     await ctx.send(sender, response)

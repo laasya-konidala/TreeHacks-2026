@@ -82,4 +82,14 @@ contextBridge.exposeInMainWorld('api', {
   onZoomMeetingClosed: (callback) => {
     ipcRenderer.on('zoom-meeting-closed', () => callback());
   },
+
+  // Avatar state: 'rest' (plato_at_rest) or 'active' (plato wants attention)
+  onAvatarState: (callback) => {
+    ipcRenderer.on('avatar-state', (_event, state) => callback(state));
+  },
+
+  // Agent mode: 'conceptual' | 'applied' | 'extension' — controls ring color
+  onAgentMode: (callback) => {
+    ipcRenderer.on('agent-mode', (_event, mode) => callback(mode));
+  },
 });
