@@ -5,7 +5,7 @@ Triggered when: student is watching a video, reading notes, learning new concept
 Goal: help them build and verify understanding of what they're consuming.
 
 2 tools:
-  - question: Socratic/comprehension question calibrated by mastery + trigger reason
+  - voice_call: Spoken dialogue to talk through the concept conversationally
   - visualization: suggest a diagram or mental model
 
 LLM: Claude (via Anthropic API).
@@ -36,7 +36,7 @@ conceptual_agent = Agent(
     mailbox=AGENTVERSE_ENABLED,
     description=(
         "Conceptual Understanding agent — helps students build knowledge "
-        "by generating contextual questions and visualizations "
+        "by generating contextual voice dialogues and visualizations "
         "based on what they're currently watching or reading."
     ),
 )
@@ -50,23 +50,23 @@ TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a s
 
 You have 2 tools. Pick ONE based on the trigger reason, mastery, and what's on screen:
 
-"question" — Ask a Socratic/comprehension question. Use when:
-  - natural_pause + any mastery: check understanding of what they just saw
+"voice_call" — Start a spoken dialogue with the student. Use when:
+  - natural_pause + any mastery: talk through what they just saw
   - stuck: ask a simpler guiding question to unstick them
-  - mode_change: bridge question connecting what they were doing to what they're doing now
-  - topic_transition: ask about the connection between old and new topic
-  - Low mastery: basic "what is" / definition questions
-  - Medium mastery: "why" / "how does this relate" questions
-  - High mastery: "what if" / extension / edge-case questions
+  - mode_change: bridge what they were doing to what they're doing now
+  - topic_transition: talk about the connection between old and new topic
+  - Low mastery: gentle check-in about the basics
+  - Medium mastery: ask them to talk through their reasoning
+  - High mastery: challenge them to explain an edge case or tradeoff
 
 "visualization" — Suggest a diagram or mental model. Use when:
   - The content is abstract (equations, theory, complex relationships)
-  - A visual would genuinely help more than a question
+  - A visual would genuinely help more than a conversation
   - The student has been reading/watching for a while and might benefit from a different angle
 
-Default to "question" if unsure.
+Default to "voice_call" if unsure.
 
-Respond with ONLY: {"tool": "question|visualization", "reasoning": "brief reason"}"""
+Respond with ONLY: {"tool": "voice_call|visualization", "reasoning": "brief reason"}"""
 
 TOOL_SELECTION_USER = """Screen details:
 {screen_details}
@@ -78,42 +78,51 @@ Recent activity:
 
 
 # ─── Exercise Generation Prompts ───
-QUESTION_SYSTEM = """You are a Socratic learning companion. Based on EXACTLY what's on the student's screen, ask ONE targeted question.
+VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student. Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
 
 Adapt based on the trigger reason:
 - natural_pause: "Before you move on..." — check they understood what they just saw
 - topic_transition: "You just went from X to Y..." — connect the two
 - stuck: Ask something SIMPLER to guide them — don't add pressure
 - mode_change: Bridge theory ↔ practice — "Now that you're coding, how does X apply?"
-- fallback: General comprehension check
+- fallback: General check-in
 
 Rules:
 - Reference SPECIFIC things from screen_details (exact equations, code, question text, etc.)
-- Ask ONE clear question, not multiple
-- Don't give the answer — make them think
-- Be concise and conversational, like a smart study buddy
-- 2-3 sentences max"""
+- Do not use any novel or new concepts beyond the student's current level
+- Sound natural and spoken — this will be read aloud, not displayed as text
+- Open with ONE clear thought or question to get them talking
+- Don't give the answer — make them think, but don't arbitrarily challenge them
+- Keep it to 2-3 sentences max
+- Do NOT give incorrect information, that is worse than giving no information at all"""
 
-QUESTION_USER = """Screen details:
+VOICE_CALL_USER = """Screen details:
 {screen_details}
 
 Topic: {topic} | Mastery: {mastery}% | Trigger: {trigger_reason}
 
 Calibrate difficulty:
-- Low mastery (0-30%): "what is" / definition / basic recall
-- Medium mastery (30-70%): "why does" / "how does this relate to" / reasoning
-- High mastery (70-100%): "what would happen if" / "can you explain why NOT" / edge cases"""
+- Low mastery (0-30%): Start with a gentle check-in about the basics
+- Medium mastery (30-70%): Ask them to talk through their reasoning
+- High mastery (70-100%): Challenge them to explain an edge case or tradeoff out loud"""
 
-VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a specific mental visualization or diagram for what the student is looking at.
+VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a visualization or diagram that would help the student understand what's on screen.
+
+Adapt based on the trigger reason:
+- natural_pause: visualize what they just learned as a recap
+- topic_transition: show how the new topic connects visually to the old one
+- stuck: simplify with a basic diagram to unstick them
 
 Rules:
 - Describe a SPECIFIC visualization tied to what's on their screen
+- Keep it easily extendable to their current concept but able to adjust the specific variables
 - Make it concrete: "Imagine..." or "Picture this..."
 - If it's math: suggest a geometric interpretation or concrete example
 - If it's code: suggest a flow diagram or state trace
 - If it's theory: suggest an analogy from everyday life
 - Keep it to 2-4 sentences
-- It should help them understand, not just be decorative"""
+- Do NOT give incorrect information, that is worse than giving no information at all
+- Connect the visualization to the specific content they're looking at"""
 
 VISUALIZATION_USER = """Screen details:
 {screen_details}
@@ -121,7 +130,7 @@ VISUALIZATION_USER = """Screen details:
 Topic: {topic} | Mastery: {mastery}% | Trigger: {trigger_reason}"""
 
 TOOL_PROMPTS = {
-    "question": (QUESTION_SYSTEM, QUESTION_USER),
+    "voice_call": (VOICE_CALL_SYSTEM, VOICE_CALL_USER),
     "visualization": (VISUALIZATION_SYSTEM, VISUALIZATION_USER),
 }
 
@@ -144,11 +153,9 @@ def _extract_screen_details(raw_vlm_text: str, activity: str, topic: str) -> str
     """
     try:
         data = json.loads(raw_vlm_text) if raw_vlm_text else {}
-        # screen_details comes from the VLM's detailed screen description
         details = data.get("gemini_screen_details", "")
         if details:
             return details
-        # Fallback: try the screen_content field
         content = data.get("screen_content", "")
         if content:
             return content
@@ -166,7 +173,6 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     mastery_pct = round(msg.mastery * 100)
     mastery_quality = msg.mastery_quality
 
-    # Extract the specific screen details (not the raw JSON dump)
     screen_details = _extract_screen_details(
         msg.vlm_context.raw_vlm_text,
         msg.vlm_context.activity,
@@ -179,7 +185,7 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
     # Step 1: Pick the best tool
-    tool = "question"  # default
+    tool = "voice_call"  # default
     try:
         tool_user_msg = TOOL_SELECTION_USER.format(
             screen_details=screen_details,
@@ -195,13 +201,13 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         if '"visualization"' in tool_text:
             tool = "visualization"
         else:
-            tool = "question"
+            tool = "voice_call"
 
         logger.info(f"[Conceptual] Selected tool: {tool}")
 
     except Exception as e:
-        logger.warning(f"[Conceptual] Tool selection failed, defaulting to question: {e}")
-        tool = "question"
+        logger.warning(f"[Conceptual] Tool selection failed, defaulting to voice_call: {e}")
+        tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
     try:
