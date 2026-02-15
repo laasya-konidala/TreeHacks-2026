@@ -53,4 +53,19 @@ contextBridge.exposeInMainWorld('api', {
   onSessionState: (callback) => {
     ipcRenderer.on('session-state', (_event, active) => callback(active));
   },
+
+  // Sidebar open/closed so character can switch plato vs plato2 animation
+  onSidebarVisibility: (callback) => {
+    ipcRenderer.on('sidebar-visibility', (_event, open) => callback(open));
+  },
+
+  // Avatar choice for character window (plato | socrates)
+  onAvatar: (callback) => {
+    ipcRenderer.on('avatar', (_event, avatar) => callback(avatar));
+  },
+
+  // Sidebar: send avatar selection to main
+  setAvatar: (avatar) => {
+    ipcRenderer.send('set-avatar', avatar);
+  },
 });
