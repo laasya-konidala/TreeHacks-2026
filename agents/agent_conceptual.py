@@ -210,30 +210,73 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
-    try:
-        system_prompt, user_template = TOOL_PROMPTS[tool]
-        exercise_user_msg = user_template.format(
-            screen_details=screen_details,
-            topic=topic,
-            mastery=mastery_pct,
-            trigger_reason=trigger_reason,
-        )
+    content_type = "text"
+    metadata = None
 
-        content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
-        logger.info(f"[Conceptual] Generated: {content[:100]}")
+    if tool == "visualization":
+        # ── Full visualization pipeline via tool_visualization.py ──
+        try:
+            from agents.tools.tool_visualization import generate_visualization
 
-    except Exception as e:
-        logger.error(f"[Conceptual] Exercise generation failed: {e}")
-        content = "Hmm, I wanted to ask you something about what you're reading, but I ran into an issue. Keep going!"
+            # Derive framing from VLM mode (not hardcoded)
+            mode_to_framing = {
+                "CONCEPTUAL": "conceptual",
+                "APPLIED": "applied",
+                "CONSOLIDATION": "extension",
+            }
+            framing = mode_to_framing.get(
+                (msg.vlm_context.mode or "").upper(), "conceptual"
+            )
+
+            viz_result = generate_visualization(
+                concept=topic,
+                subconcept=msg.vlm_context.subtopic or "",
+                confusion_hypothesis=msg.vlm_context.error_description or "",
+                screen_context=screen_details,
+                student_question="",
+                session_id=msg.session_id,
+                framing=framing,
+                mastery_pct=mastery_pct,
+            )
+
+            content = viz_result.get("content", "")
+            content_type = viz_result.get("content_type", "visualization")
+            metadata = viz_result.get("metadata")
+            logger.info(f"[Conceptual] Visualization generated — tier: {(metadata or {}).get('tier', '?')}")
+
+        except Exception as e:
+            logger.error(f"[Conceptual] Visualization generation failed: {e}")
+            content = "I wanted to show you a visualization, but ran into an issue. Keep going!"
+            content_type = "text"
+            metadata = None
+    else:
+        # ── voice_call or other text-based tools ──
+        try:
+            system_prompt, user_template = TOOL_PROMPTS[tool]
+            exercise_user_msg = user_template.format(
+                screen_details=screen_details,
+                topic=topic,
+                mastery=mastery_pct,
+                trigger_reason=trigger_reason,
+            )
+
+            content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
+            logger.info(f"[Conceptual] Generated: {content[:100]}")
+
+        except Exception as e:
+            logger.error(f"[Conceptual] Exercise generation failed: {e}")
+            content = "Hmm, I wanted to ask you something about what you're reading, but I ran into an issue. Keep going!"
 
     # Step 3: Send response back to orchestrator
     response = AgentResponse(
         agent_type="conceptual",
         content=content,
+        content_type=content_type,
         tool_used=tool,
         topic=topic,
         mastery=msg.mastery,
+        metadata=metadata,
     )
 
     await ctx.send(sender, response)
-    logger.info(f"[Conceptual] Response sent — tool: {tool}, trigger: {trigger_reason}")
+    logger.info(f"[Conceptual] Response sent — tool: {tool}, content_type: {content_type}, trigger: {trigger_reason}")

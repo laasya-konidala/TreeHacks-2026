@@ -36,9 +36,11 @@ class AgentResponse(Model):
     """Response from an agent back to the orchestrator / sidebar."""
     agent_type: str                 # "conceptual" | "applied" | "extension"
     content: str                    # the exercise, question, or prompt to show
-    tool_used: str = "question"     # question | visualization | review | quiz
+    content_type: str = "text"      # "text" | "visualization"
+    tool_used: str = "question"     # question | visualization | voice_call
     topic: str = ""
     mastery: float = 0.0
+    metadata: Optional[dict] = None # for visualization: tier, visualization payload
 
 
 class TimingSignal(Model):

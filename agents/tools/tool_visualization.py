@@ -106,20 +106,56 @@ Rules:
 """
 
 
+# ─── Agent framing: how to slant the visualization based on which agent called ───
+FRAMING = {
+    "conceptual": """The student is LEARNING this concept (watching a video, reading notes).
+Goal: help them BUILD UNDERSTANDING.
+- Visualize what the concept MEANS, not how to use it
+- Show the intuition, the "why", the geometric/physical interpretation
+- E.g., for eigenvalues: show how a matrix transforms vectors, some stretch (eigenvectors) and some don't
+- Keep it simple if mastery is low — one core idea visualized clearly
+- Prioritize clarity over complexity""",
+
+    "applied": """The student is SOLVING A PROBLEM (coding, doing exercises, working through steps).
+Goal: help them GET UNSTUCK or CHECK THEIR WORK.
+- Visualize the SPECIFIC problem they're working on, using the EXACT values from their screen
+- Show intermediate steps, where they might have gone wrong, or what the answer should look like
+- E.g., for eigenvalues: plot the characteristic polynomial with THEIR matrix values, show where the roots are
+- Be concrete and practical, not abstract
+- Use the exact numbers, variables, and expressions from the screen""",
+
+    "extension": """The student has decent mastery and we want to PUSH DEEPER.
+Goal: show connections, generalizations, or "what if" explorations.
+- Visualize what happens when you change parameters, edge cases, connections to other topics
+- E.g., for eigenvalues: interactive sliders to change matrix entries and watch eigenvectors rotate/scale in real-time
+- Make it exploratory — let them discover something, don't just show them
+- Prioritize interactivity (sliders, clickable elements, hover effects) over static content
+- Show the bigger picture""",
+}
+
+
 def _build_user_message(
     concept: str,
     subconcept: str,
     confusion_hypothesis: str,
     screen_context: str,
     student_question: str,
+    framing: str = "conceptual",
+    mastery_pct: int = 0,
 ) -> str:
+    framing_text = FRAMING.get(framing, FRAMING["conceptual"])
+
     return f"""Current context for the visualization:
 
 Concept: {concept or "general"}
 Subconcept: {subconcept or "—"}
-What we suspect they're confused about: {confusion_hypothesis or "—"}
-What's on their screen / what they're looking at: {screen_context or "—"}
+Student mastery: {mastery_pct}% — {"beginner, keep it simple" if mastery_pct < 30 else "intermediate, moderate complexity" if mastery_pct < 70 else "advanced, can handle depth and interactivity"}
+What's on their screen: {screen_context or "—"}
+What we suspect they need help with: {confusion_hypothesis or "—"}
 Student question (if any): {student_question or "—"}
+
+Agent framing (how to slant this visualization):
+{framing_text}
 
 Choose latex, d3, plotly, or manim and return ONLY the JSON object (no markdown, no explanation)."""
 
@@ -158,18 +194,25 @@ def generate_visualization(
     screen_context: str = "",
     student_question: str = "",
     session_id: Optional[str] = None,
+    framing: str = "conceptual",
+    mastery_pct: int = 0,
 ) -> dict[str, Any]:
     """
     Call Claude with context and the four options (latex, d3, plotly, manim).
     Claude returns code/content; we normalize it into the UI payload the sidebar
     expects so it can embed and display it nicely.
 
+    Args:
+        framing: "conceptual" | "applied" | "extension" — how to slant the visualization
+        mastery_pct: 0-100 student mastery level — calibrates complexity
+
     Returns a dict suitable for the overlay: content_type, content, metadata.tier,
     metadata.visualization with tier-specific fields (content, code, figure, etc.).
     """
     session_id = session_id or ""
     user_msg = _build_user_message(
-        concept, subconcept, confusion_hypothesis, screen_context, student_question
+        concept, subconcept, confusion_hypothesis, screen_context, student_question,
+        framing=framing, mastery_pct=mastery_pct,
     )
 
     try:
