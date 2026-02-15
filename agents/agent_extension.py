@@ -1,11 +1,14 @@
 """
-Agent 1: Conceptual Understanding (Building Knowledge)
+Agent: Extension (Stretch & Connect)
 
-Triggered when: student is watching a video, reading notes, learning new concepts.
-Goal: help them build and verify understanding of what they're consuming.
+Triggered when: student has demonstrated solid understanding and is ready
+to go beyond the current material.
+
+Goal: push the student to transfer, generalize, or connect the concept
+to adjacent ideas they haven't seen yet.
 
 Uses shared tools (voice_call, visualization) but frames everything
-through a "do you understand what you're seeing?" lens.
+through a "can you go further / connect this to something new?" lens.
 
 LLM: Claude (via Anthropic API) for high-quality exercise generation.
 """
@@ -22,20 +25,20 @@ from agents.models import AgentRequest, AgentResponse
 logger = logging.getLogger(__name__)
 
 # ─── Agent Setup ───
-CONCEPTUAL_SEED = "ambient_learning_conceptual_seed_2026"
-CONCEPTUAL_PORT = 8002
+EXTENSION_SEED = "ambient_learning_extension_seed_2026"
+EXTENSION_PORT = 8004
 
-conceptual_agent = Agent(
-    name="conceptual_understanding",
-    port=CONCEPTUAL_PORT,
-    seed=CONCEPTUAL_SEED,
-    endpoint=[f"http://127.0.0.1:{CONCEPTUAL_PORT}/submit"],
+extension_agent = Agent(
+    name="extension_stretch",
+    port=EXTENSION_PORT,
+    seed=EXTENSION_SEED,
+    endpoint=[f"http://127.0.0.1:{EXTENSION_PORT}/submit"],
     agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
     mailbox=AGENTVERSE_ENABLED,
     description=(
-        "Conceptual Understanding agent — helps students build knowledge "
-        "by generating contextual questions, visualizations, and checks "
-        "based on what they're currently watching or reading."
+        "Extension agent — pushes students beyond current material by generating "
+        "transfer questions, cross-topic connections, and stretch challenges "
+        "based on demonstrated mastery. Takes a topic to a new abstraction of knowledge."
     ),
 )
 
@@ -43,7 +46,7 @@ conceptual_agent = Agent(
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # ─── Tool Selection Prompt ───
-TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is currently building conceptual understanding (watching a video, reading notes, learning something new).
+TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who has demonstrated solid understanding and is ready to stretch beyond the current material.
 
 Pick the BEST tool to use right now. Choose ONE:
 - "voice_call": Initiate a spoken dialogue with the student to talk through the concept conversationally
@@ -119,11 +122,12 @@ def _call_claude(system: str, user_msg: str, max_tokens: int = 300) -> str:
 
 
 # ─── Message Handler ───
-@conceptual_agent.on_message(model=AgentRequest)
+@extension_agent.on_message(model=AgentRequest)
 async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     """Handle a request from the orchestrator."""
-    logger.info(f"[Conceptual] Received request — topic: {msg.vlm_context.topic}, mastery: {msg.mastery:.0%}")
+    logger.info(f"[Extension] Received request — topic: {msg.vlm_context.topic}, mastery: {msg.mastery:.0%}")
 
+    # ── Unpack the incoming context (same for every agent) ──
     vlm_text = msg.vlm_context.raw_vlm_text or f"{msg.vlm_context.activity} — {msg.vlm_context.topic}"
     topic = msg.vlm_context.topic or "the current topic"
     mastery_pct = round(msg.mastery * 100)
@@ -154,10 +158,10 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         else:
             tool = "voice_call"
 
-        logger.info(f"[Conceptual] Selected tool: {tool}")
+        logger.info(f"[Extension] Selected tool: {tool}")
 
     except Exception as e:
-        logger.warning(f"[Conceptual] Tool selection failed, defaulting to voice_call: {e}")
+        logger.warning(f"[Extension] Tool selection failed, defaulting to voice_call: {e}")
         tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
@@ -171,15 +175,15 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         )
 
         content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
-        logger.info(f"[Conceptual] Generated: {content[:100]}")
+        logger.info(f"[Extension] Generated: {content[:100]}")
 
     except Exception as e:
-        logger.error(f"[Conceptual] Exercise generation failed: {e}")
-        content = "Hmm, I wanted to ask you something about what you're reading, but I ran into an issue. Keep going!"
+        logger.error(f"[Extension] Exercise generation failed: {e}")
+        content = "I had something cool to connect this to, but hit a snag. Keep going!"
 
-    # Step 3: Send response back to orchestrator
+    # ── Step 3: Send response back to orchestrator (same for every agent) ──
     response = AgentResponse(
-        agent_type="conceptual",
+        agent_type="extension",
         content=content,
         tool_used=tool,
         topic=topic,
@@ -187,4 +191,4 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     )
 
     await ctx.send(sender, response)
-    logger.info(f"[Conceptual] Response sent — tool: {tool}")
+    logger.info(f"[Extension] Response sent — tool: {tool}")

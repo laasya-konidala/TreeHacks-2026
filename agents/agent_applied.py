@@ -1,11 +1,14 @@
 """
-Agent 1: Conceptual Understanding (Building Knowledge)
+Agent: Applied (Problem Solving & Agentic Reasoning)
 
-Triggered when: student is watching a video, reading notes, learning new concepts.
-Goal: help them build and verify understanding of what they're consuming.
+Triggered when: student is actively solving a problem, writing code,
+working through exercises, or applying concepts hands-on.
+
+Goal: guide the student through problem-solving by
+scaffolding their reasoning process, working iteratively and incrementally to get to a solution, not giving answers
 
 Uses shared tools (voice_call, visualization) but frames everything
-through a "do you understand what you're seeing?" lens.
+through a "how are you approaching this problem?" lens, and help them think through the problem incrementally and iteratively. Being clear about the goal being able to solve a problem. 
 
 LLM: Claude (via Anthropic API) for high-quality exercise generation.
 """
@@ -22,20 +25,20 @@ from agents.models import AgentRequest, AgentResponse
 logger = logging.getLogger(__name__)
 
 # ─── Agent Setup ───
-CONCEPTUAL_SEED = "ambient_learning_conceptual_seed_2026"
-CONCEPTUAL_PORT = 8002
+APPLIED_SEED = "ambient_learning_applied_seed_2026"
+APPLIED_PORT = 8003
 
-conceptual_agent = Agent(
-    name="conceptual_understanding",
-    port=CONCEPTUAL_PORT,
-    seed=CONCEPTUAL_SEED,
-    endpoint=[f"http://127.0.0.1:{CONCEPTUAL_PORT}/submit"],
+applied_agent = Agent(
+    name="applied_problem_solving",
+    port=APPLIED_PORT,
+    seed=APPLIED_SEED,
+    endpoint=[f"http://127.0.0.1:{APPLIED_PORT}/submit"],
     agentverse=AGENTVERSE_URL if AGENTVERSE_ENABLED else None,
     mailbox=AGENTVERSE_ENABLED,
     description=(
-        "Conceptual Understanding agent — helps students build knowledge "
-        "by generating contextual questions, visualizations, and checks "
-        "based on what they're currently watching or reading."
+        "Applied problem-solving agent — helps students work through problems "
+        "by scaffolding their reasoning process, identifying stuck points, "
+        "and guiding them toward solutions without giving answers directly."
     ),
 )
 
@@ -43,11 +46,19 @@ conceptual_agent = Agent(
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # ─── Tool Selection Prompt ───
-TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is currently building conceptual understanding (watching a video, reading notes, learning something new).
+#
+# INSERT updated reasoning for how this agent decides between tools.
+# The framing should be problem-solving oriented — e.g., "the student
+# is actively working on something, how do we best support them?"
+#
+TOOL_SELECTION_SYSTEM = """<INSERT TOOL SELECTION SYSTEM PROMPT — e.g., You are a learning
+assistant deciding HOW to help a student who is actively solving a problem.
+Consider whether they need to talk through their approach or see the
+problem from a different angle.>
 
 Pick the BEST tool to use right now. Choose ONE:
-- "voice_call": Initiate a spoken dialogue with the student to talk through the concept conversationally
-- "visualization": Suggest a way to visualize/diagram the concept to deepen understanding
+- "voice_call": Initiate a spoken dialogue with the student to talk through their problem-solving approach
+- "visualization": Suggest a way to visualize/diagram the problem to unblock their thinking
 
 Respond with ONLY a JSON object:
 {"tool": "voice_call|visualization", "reasoning": "why this tool right now"}"""
@@ -63,14 +74,21 @@ Recent activity:
 {speech_context}"""
 
 # ─── Exercise Generation Prompts ───
-VOICE_CALL_SYSTEM = """You are a friendly spoken-word tutor about to start a live voice conversation with the student. Based on what's on their screen, generate an opening line that kicks off a short dialogue about the concept.
+#
+# INSERT updated reasoning for how voice_call works in a problem-solving
+# context. The current prompts below are placeholders — replace the
+# VOICE_CALL_SYSTEM content with applied/problem-solving specific logic.
+#
+VOICE_CALL_SYSTEM = """< You are a friendly spoken-word
+tutor helping a student who is in the middle of solving a problem. Based on
+what's on their screen, generate an opening line that helps them reason
+through their current step and future steps on this problemwithout giving the answer away.>
 
 Rules:
-- Reference EXACTLY what's on their screen (specific equations, diagrams, code, etc.)
-- Do not use any novel or new concepts beyond the level of understanding of the current concept in front of the student
+- Reference EXACTLY what's on their screen (specific equations, code, work-in-progress, etc.)
+- Do not solve the problem for them
 - Sound natural and spoken — this will be read aloud, not displayed as text
-- Open with ONE clear thought or question to get them talking
-- Don't give the answer — make them think, but do not arbitrarily challenge them
+- Open with ONE clear thought or question about their current approach
 - Keep it to 2-3 sentences max
 - Do NOT give incorrect information, that is worse than giving no information at all"""
 
@@ -78,17 +96,17 @@ VOICE_CALL_USER = """What's on their screen right now:
 {vlm_context}
 
 Their mastery of "{topic}" is {mastery}% — calibrate difficulty accordingly.
-- Low mastery (0-30%): Start with a gentle check-in about the basics
-- Medium mastery (30-70%): Ask them to talk through their reasoning
-- High mastery (70-100%): Challenge them to explain an edge case or tradeoff out loud
+- Low mastery (0-30%): <INSERT — e.g., Help them identify the first step>
+- Medium mastery (30-70%): <INSERT — e.g., Ask about their strategy or what they've tried>
+- High mastery (70-100%): <INSERT — e.g., Challenge them on efficiency or alternative approaches>
 
 {speech_context}"""
 
 VISUALIZATION_SYSTEM = """You are a learning companion. Suggest a visualization or diagram that would help the student understand what's on screen.
 
 Rules:
-- Describe a specific visualization related to what's on screen
-- Keep it easily extendable to their current concept but able to adjust the specific variables of whats going on
+- Describe a specific visualization related to what's on screen and specifically what is related to the problem at hand instead of an arbitrary simplification or extension of some other concept
+- Let elements of the visualization be adjustable if elements of the problem at hand are adjustable and relevant to the problem at hand
 - Make it concrete: "Imagine..." or "Picture this..."
 - Keep it to 2-3 sentences
 - Do NOT give incorrect information, that is worse than giving no informtion at all
@@ -119,11 +137,12 @@ def _call_claude(system: str, user_msg: str, max_tokens: int = 300) -> str:
 
 
 # ─── Message Handler ───
-@conceptual_agent.on_message(model=AgentRequest)
+@applied_agent.on_message(model=AgentRequest)
 async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     """Handle a request from the orchestrator."""
-    logger.info(f"[Conceptual] Received request — topic: {msg.vlm_context.topic}, mastery: {msg.mastery:.0%}")
+    logger.info(f"[Applied] Received request — topic: {msg.vlm_context.topic}, mastery: {msg.mastery:.0%}")
 
+    # ── Unpack the incoming context (same for every agent) ──
     vlm_text = msg.vlm_context.raw_vlm_text or f"{msg.vlm_context.activity} — {msg.vlm_context.topic}"
     topic = msg.vlm_context.topic or "the current topic"
     mastery_pct = round(msg.mastery * 100)
@@ -154,10 +173,10 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         else:
             tool = "voice_call"
 
-        logger.info(f"[Conceptual] Selected tool: {tool}")
+        logger.info(f"[Applied] Selected tool: {tool}")
 
     except Exception as e:
-        logger.warning(f"[Conceptual] Tool selection failed, defaulting to voice_call: {e}")
+        logger.warning(f"[Applied] Tool selection failed, defaulting to voice_call: {e}")
         tool = "voice_call"
 
     # Step 2: Generate the exercise using the selected tool
@@ -171,15 +190,15 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
         )
 
         content = _call_claude(system_prompt, exercise_user_msg, max_tokens=300)
-        logger.info(f"[Conceptual] Generated: {content[:100]}")
+        logger.info(f"[Applied] Generated: {content[:100]}")
 
     except Exception as e:
-        logger.error(f"[Conceptual] Exercise generation failed: {e}")
-        content = "Hmm, I wanted to ask you something about what you're reading, but I ran into an issue. Keep going!"
+        logger.error(f"[Applied] Exercise generation failed: {e}")
+        content = "I wanted to help you think through this problem, but hit a snag. Keep working — you've got this!"
 
-    # Step 3: Send response back to orchestrator
+    # ── Step 3: Send response back to orchestrator (same for every agent) ──
     response = AgentResponse(
-        agent_type="conceptual",
+        agent_type="applied",
         content=content,
         tool_used=tool,
         topic=topic,
@@ -187,4 +206,4 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
     )
 
     await ctx.send(sender, response)
-    logger.info(f"[Conceptual] Response sent — tool: {tool}")
+    logger.info(f"[Applied] Response sent — tool: {tool}")
