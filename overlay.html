@@ -37,7 +37,7 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      -webkit-app-region: drag;
+      cursor: grab;
     }
 
     .header-left {
@@ -75,7 +75,6 @@
 
     /* ── Toggle button ── */
     .toggle-btn {
-      -webkit-app-region: no-drag;
       width: 40px;
       height: 24px;
       border-radius: 12px;
@@ -311,8 +310,36 @@
     const agentIcon = document.getElementById('agentIcon');
     const agentName = document.getElementById('agentName');
     const agentMode = document.getElementById('agentMode');
+    const header = document.querySelector('.header');
 
     let isActive = false;
+
+    // ── Manual drag for header (moves cat + sidebar together) ──
+    let headerDragging = false;
+    let headerStartX = 0;
+    let headerStartY = 0;
+
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.toggle-btn')) return;
+      headerDragging = true;
+      headerStartX = e.screenX;
+      headerStartY = e.screenY;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!headerDragging) return;
+      const dx = e.screenX - headerStartX;
+      const dy = e.screenY - headerStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        window.api.moveWindow(dx, dy);
+        headerStartX = e.screenX;
+        headerStartY = e.screenY;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      headerDragging = false;
+    });
 
     // ── Speech Recognition (Web Speech API — runs locally) ──
     let recognition = null;
