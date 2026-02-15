@@ -68,4 +68,18 @@ contextBridge.exposeInMainWorld('api', {
   setAvatar: (avatar) => {
     ipcRenderer.send('set-avatar', avatar);
   },
+
+  // Zoom meeting
+  openExternal: (url) => {
+    ipcRenderer.send('open-external', url);
+  },
+  launchZoomMeeting: (url) => {
+    ipcRenderer.send('launch-zoom-meeting', url);
+  },
+  closeZoomMeeting: () => {
+    ipcRenderer.send('close-zoom-meeting');
+  },
+  onZoomMeetingClosed: (callback) => {
+    ipcRenderer.on('zoom-meeting-closed', () => callback());
+  },
 });

@@ -280,6 +280,133 @@
       outline: none;
       border-color: rgba(16, 185, 129, 0.5);
     }
+
+    /* ── Call footer (voice bars + Slide to call + Zoom) ── */
+    .call-footer {
+      padding: 14px 20px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      -webkit-app-region: no-drag;
+    }
+    .voice-bars-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 36px;
+    }
+    .voice-bar {
+      width: 5px;
+      height: 10px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .voice-bars-row.speaking .voice-bar {
+      background: rgba(16, 185, 129, 0.9);
+      animation: voiceBarSpeak 0.35s ease-in-out infinite alternate;
+    }
+    .voice-bars-row.speaking .voice-bar:nth-child(1) { animation-delay: 0s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(2) { animation-delay: 0.05s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(3) { animation-delay: 0.1s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(4) { animation-delay: 0.08s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(5) { animation-delay: 0.03s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(6) { animation-delay: 0.12s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(7) { animation-delay: 0.06s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(8) { animation-delay: 0.04s; }
+    .voice-bars-row.speaking .voice-bar:nth-child(9) { animation-delay: 0.1s; }
+    @keyframes voiceBarSpeak {
+      from { height: 12px; }
+      to { height: 28px; }
+    }
+    .call-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .call-row.slide-row {
+      justify-content: center;
+      width: 100%;
+    }
+    .slide-to-call-track {
+      width: 100%;
+      max-width: 300px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 28px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .slide-to-call-track .label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+      font-weight: 500;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .slide-to-call-track.triggered .label { opacity: 0; }
+    .slide-to-call-thumb {
+      position: absolute;
+      left: 4px;
+      top: 4px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      user-select: none;
+      transition: transform 0.1s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .slide-to-call-thumb:active { cursor: grabbing; }
+    .slide-to-call-thumb svg {
+      width: 22px;
+      height: 22px;
+      color: #10b981;
+    }
+    .zoom-btns {
+      display: flex;
+      gap: 8px;
+    }
+    .zoom-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .zoom-btn:hover { background: rgba(255, 255, 255, 0.12); }
+    .zoom-btn.connected { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); }
+    .end-call-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .end-call-btn:hover { background: rgba(239, 68, 68, 0.35); }
+    .end-call-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
@@ -318,6 +445,36 @@
       <div class="empty-state" id="emptyState">
         <div class="icon">👁️</div>
         <div>Toggle the switch to start.<br>I'll watch your screen and listen<br>to understand what you're learning.</div>
+      </div>
+    </div>
+
+    <div class="call-footer">
+      <div class="voice-bars-row" id="voiceBarsRow" aria-hidden="true">
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+      </div>
+      <div class="call-row slide-row">
+        <div class="slide-to-call-track" id="slideToCallTrack" title="Slide right to start call">
+          <span class="label" id="slideToCallLabel">Slide to call</span>
+          <div class="slide-to-call-thumb" id="slideToCallThumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="call-row zoom-btns">
+        <button class="zoom-btn" id="zoomConnectBtn">Connect Zoom</button>
+        <button class="zoom-btn" id="zoomResetBtn">New link</button>
+        <button class="end-call-btn" id="endCallBtn" title="End call">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+          End call
+        </button>
       </div>
     </div>
   </div>
@@ -656,6 +813,188 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    // ── Zoom & Realtime voice (call footer) ──
+    const BACKEND_URL = 'http://localhost:8080';
+    const slideToCallTrack = document.getElementById('slideToCallTrack');
+    const slideToCallThumb = document.getElementById('slideToCallThumb');
+    const slideToCallLabel = document.getElementById('slideToCallLabel');
+    const voiceBarsRow = document.getElementById('voiceBarsRow');
+    const zoomConnectBtn = document.getElementById('zoomConnectBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
+    const endCallBtn = document.getElementById('endCallBtn');
+
+    let realtimeSession = null;
+
+    async function startRealtimeVoice() {
+      if (realtimeSession) return;
+      try {
+        const r = await fetch(`${BACKEND_URL}/realtime/config`);
+        const config = await r.json();
+        if (config.error || !config.apiKey) {
+          console.warn('[Realtime]', config.error || 'No API key');
+          return;
+        }
+        const { RealtimeAgent, RealtimeSession: RSession } = await import('https://esm.sh/@openai/agents@0.4/realtime');
+        const agent = new RealtimeAgent({ name: 'Cat', instructions: config.instructions || 'You are a helpful assistant.' });
+        const session = new RSession(agent);
+        await session.connect({ apiKey: config.apiKey });
+        realtimeSession = session;
+        if (voiceBarsRow) voiceBarsRow.classList.add('speaking');
+        console.log('[Realtime] Voice agent listening');
+      } catch (e) {
+        console.warn('[Realtime] Failed to start:', e);
+      }
+    }
+
+    function stopRealtimeVoice() {
+      if (realtimeSession) {
+        try {
+          if (typeof realtimeSession.close === 'function') realtimeSession.close();
+          else if (realtimeSession.transport && typeof realtimeSession.transport.close === 'function') realtimeSession.transport.close();
+        } catch (e) {}
+        realtimeSession = null;
+        if (voiceBarsRow) voiceBarsRow.classList.remove('speaking');
+        console.log('[Realtime] Voice agent stopped');
+      }
+    }
+
+    async function launchZoomCall() {
+      try {
+        const r = await fetch(`${BACKEND_URL}/zoom/create-meeting`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await r.json();
+        if (data.error || !data.join_url) {
+          statusText.textContent = data.error || 'Could not create meeting';
+          return;
+        }
+        slideToCallLabel.textContent = 'In call';
+        window.api.launchZoomMeeting(data.join_url);
+        await startRealtimeVoice();
+      } catch (e) {
+        statusText.textContent = 'Backend not running. Start run.py first.';
+      }
+    }
+
+    (function initSlideToCall() {
+      let inCall = false;
+      let dragging = false;
+      let startX = 0;
+      let currentX = 0;
+      const thumb = slideToCallThumb;
+      const track = slideToCallTrack;
+
+      function getMaxSlide() {
+        return track.offsetWidth - thumb.offsetWidth - 8;
+      }
+
+      function setThumbPosition(px) {
+        const maxSlide = getMaxSlide();
+        const x = Math.max(0, Math.min(px, maxSlide));
+        currentX = x;
+        thumb.style.transform = `translateX(${x}px)`;
+        track.classList.toggle('triggered', x >= maxSlide * 0.85);
+        return x;
+      }
+
+      function resetThumb() {
+        currentX = 0;
+        thumb.style.transform = 'translateX(0)';
+        track.classList.remove('triggered');
+      }
+
+      thumb.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        if (inCall) return;
+        dragging = true;
+        startX = e.clientX - currentX;
+      });
+      track.addEventListener('mousedown', (e) => {
+        if (inCall || e.target === thumb) return;
+        dragging = true;
+        startX = e.clientX - currentX;
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        setThumbPosition(e.clientX - startX);
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        const maxSlide = getMaxSlide();
+        if (currentX >= maxSlide * 0.85) {
+          inCall = true;
+          slideToCallLabel.textContent = 'In call';
+          thumb.style.transform = `translateX(${maxSlide}px)`;
+          currentX = maxSlide;
+          launchZoomCall();
+        } else {
+          resetThumb();
+        }
+      });
+
+      window.api.onZoomMeetingClosed(() => {
+        inCall = false;
+        slideToCallLabel.textContent = 'Slide to call';
+        resetThumb();
+      });
+    })();
+
+    endCallBtn.addEventListener('click', () => {
+      stopRealtimeVoice();
+      window.api.closeZoomMeeting();
+      slideToCallLabel.textContent = 'Slide to call';
+    });
+
+    window.api.onZoomMeetingClosed(() => {
+      stopRealtimeVoice();
+      slideToCallLabel.textContent = 'Slide to call';
+    });
+
+    async function checkZoomStatus() {
+      try {
+        const r = await fetch(`${BACKEND_URL}/zoom/status`);
+        const data = await r.json();
+        zoomConnectBtn.textContent = data.connected ? 'Zoom ✓' : 'Connect Zoom';
+        zoomConnectBtn.classList.toggle('connected', data.connected);
+        return data.connected;
+      } catch (e) {
+        zoomConnectBtn.textContent = 'Connect Zoom';
+        zoomConnectBtn.classList.remove('connected');
+        return false;
+      }
+    }
+
+    zoomConnectBtn.addEventListener('click', async () => {
+      if (await checkZoomStatus()) {
+        statusText.textContent = 'Zoom already connected';
+        return;
+      }
+      try {
+        const r = await fetch(`${BACKEND_URL}/zoom/auth`);
+        const data = await r.json();
+        if (data.url) {
+          window.api.openExternal(data.url);
+          statusText.textContent = 'Open the browser to connect Zoom...';
+          setTimeout(checkZoomStatus, 5000);
+        } else {
+          statusText.textContent = data.error || 'Zoom auth failed';
+        }
+      } catch (e) {
+        statusText.textContent = 'Could not get Zoom auth URL';
+      }
+    });
+
+    zoomResetBtn.addEventListener('click', async () => {
+      try {
+        await fetch(`${BACKEND_URL}/zoom/reset-meeting`, { method: 'POST' });
+        slideToCallLabel.textContent = 'Slide to call';
+        statusText.textContent = 'Meeting reset. Slide to call for a new link.';
+      } catch (e) {}
+    });
+
+    checkZoomStatus();
   </script>
 </body>
 </html>

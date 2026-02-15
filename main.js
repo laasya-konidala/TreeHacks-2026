@@ -2,7 +2,7 @@ const path = require('path');
 const http = require('http');
 const url = require('url');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-const { app, BrowserWindow, screen, desktopCapturer, ipcMain, systemPreferences } = require('electron');
+const { app, BrowserWindow, screen, desktopCapturer, ipcMain, systemPreferences, shell } = require('electron');
 const WebSocket = require('ws');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -26,6 +26,7 @@ let claude = null;       // Anthropic client
 let contextBuffer = []; // rolling buffer of recent observations
 const MAX_CONTEXT = 10;
 let agentWs = null;     // WebSocket to Python agent backend
+let zoomMeetingWindow = null;
 
 // ─── Create floating character window ───────────────────────────────
 function createCharacter() {
@@ -457,6 +458,40 @@ ipcMain.on('toggle-session', async () => {
       sendStatus('error', `Failed to start: ${err.message || err}`);
     }
   }
+});
+
+// ─── Zoom meeting window ───────────────────────────────────────────
+ipcMain.on('launch-zoom-meeting', (_event, joinUrl) => {
+  if (zoomMeetingWindow && !zoomMeetingWindow.isDestroyed()) {
+    zoomMeetingWindow.loadURL(joinUrl);
+    zoomMeetingWindow.show();
+    return;
+  }
+  const { width: sw, height: sh } = screen.getPrimaryDisplay().bounds;
+  zoomMeetingWindow = new BrowserWindow({
+    width: 420,
+    height: 680,
+    x: sw - 440,
+    y: Math.floor((sh - 680) / 2),
+    webPreferences: { nodeIntegration: false },
+  });
+  zoomMeetingWindow.loadURL(joinUrl);
+  zoomMeetingWindow.on('closed', () => {
+    zoomMeetingWindow = null;
+    if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+      sidebarWindow.webContents.send('zoom-meeting-closed');
+    }
+  });
+});
+
+ipcMain.on('close-zoom-meeting', () => {
+  if (zoomMeetingWindow && !zoomMeetingWindow.isDestroyed()) {
+    zoomMeetingWindow.close();
+  }
+});
+
+ipcMain.on('open-external', (_event, url) => {
+  shell.openExternal(url);
 });
 
 // ─── Helpers ───────────────────────────────────────────────────────
