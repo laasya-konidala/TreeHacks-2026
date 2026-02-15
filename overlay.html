@@ -199,6 +199,60 @@
     .feed-item.mode-APPLIED { border-left: 2px solid rgba(59, 130, 246, 0.5); }
     .feed-item.mode-CONSOLIDATION { border-left: 2px solid rgba(16, 185, 129, 0.5); }
 
+    .feed-item.agent-response {
+      border-left: 2px solid rgba(239, 68, 68, 0.7);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .feed-item.agent-response .agent-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(239, 68, 68, 0.15);
+      color: rgba(239, 68, 68, 0.9);
+      margin-left: 6px;
+      font-weight: 600;
+    }
+
+    /* ── Agent trigger flash banner ── */
+    .agent-flash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #ef4444, #f97316);
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      text-align: center;
+      z-index: 9999;
+      animation: flashIn 0.3s ease, flashPulse 0.6s ease 0.3s 2;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+    }
+    .agent-flash .flash-detail {
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.9;
+      margin-top: 2px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    @keyframes flashIn {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes flashPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    @keyframes flashOut {
+      from { transform: translateY(0); opacity: 1; }
+      to { transform: translateY(-100%); opacity: 0; }
+    }
+
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -375,6 +429,72 @@
       }
 
       feed.scrollTop = feed.scrollHeight;
+    });
+
+    // ── Agent responses from Python backend (via WebSocket → main → IPC) ──
+    window.api.onAgentResponse((msg) => {
+      emptyState.style.display = 'none';
+
+      const item = document.createElement('div');
+      item.className = 'feed-item agent-response';
+
+      const agentEmoji = {
+        deep_diver: '🧠', assessor: '⚡', visualizer: '🎨', orchestrator: '💡'
+      }[msg.agent_type] || '🤖';
+
+      const agentLabel = {
+        deep_diver: 'Deep Diver', assessor: 'Assessor',
+        visualizer: 'Visualizer', orchestrator: 'Hint'
+      }[msg.agent_type] || msg.agent_type;
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      item.innerHTML = `
+        <div class="time">${now} ${agentEmoji}<span class="agent-badge">${agentLabel}</span></div>
+        <div class="text">${escapeHtml(msg.content || '')}</div>
+      `;
+
+      feed.appendChild(item);
+      feed.scrollTop = feed.scrollHeight;
+    });
+
+    // ── Agent trigger indicator — fires on EVERY Gemini VLM output ──
+    let agentTriggerCount = 0;
+    window.api.onAgentTriggered((data) => {
+      agentTriggerCount++;
+      emptyState.style.display = 'none';
+
+      // ── Flash banner at the top ──
+      const existingFlash = document.querySelector('.agent-flash');
+      if (existingFlash) existingFlash.remove();
+
+      const flash = document.createElement('div');
+      flash.className = 'agent-flash';
+      flash.innerHTML = `🚨 AGENT TRIGGERED (#${agentTriggerCount})<div class="flash-detail">Topic: ${escapeHtml(data.topic)} — ${escapeHtml(data.activity || '')}</div>`;
+      document.body.appendChild(flash);
+
+      // Auto-remove the flash after 3 seconds
+      setTimeout(() => {
+        flash.style.animation = 'flashOut 0.3s ease forwards';
+        setTimeout(() => flash.remove(), 300);
+      }, 3000);
+
+      // ── Feed item ──
+      const item = document.createElement('div');
+      item.className = 'feed-item agent-response';
+
+      const now = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      item.innerHTML = `
+        <div class="time">${now} 🚨<span class="agent-badge">AGENT #${agentTriggerCount}</span></div>
+        <div class="text">📡 VLM → Agent triggered\n📚 Topic: ${escapeHtml(data.topic)}\n📋 ${escapeHtml(data.activity || 'analyzing screen')}</div>
+      `;
+
+      feed.appendChild(item);
+      feed.scrollTop = feed.scrollHeight;
+
+      // ── Console log for visibility ──
+      console.log(`[AGENT TRIGGERED #${agentTriggerCount}]`, data.topic, data.activity);
     });
 
     window.api.onStatusUpdate((data) => {

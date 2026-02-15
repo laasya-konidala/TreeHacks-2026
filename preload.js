@@ -28,4 +28,14 @@ contextBridge.exposeInMainWorld('api', {
   onStopMic: (callback) => {
     ipcRenderer.on('stop-mic', (_event) => callback());
   },
+
+  // Receive agent responses forwarded from the Python backend via WebSocket
+  onAgentResponse: (callback) => {
+    ipcRenderer.on('agent-response', (_event, data) => callback(data));
+  },
+
+  // Simple agent trigger (Gemini detected user is stuck/confused)
+  onAgentTriggered: (callback) => {
+    ipcRenderer.on('agent-triggered', (_event, data) => callback(data));
+  },
 });

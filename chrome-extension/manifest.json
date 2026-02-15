@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Ambient Learning Observer",
+  "version": "1.0",
+  "description": "Monitors typing behavior and sends signals to the ambient learning agent system.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "trigger-help": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Request help from learning agent"
+    }
+  }
+}
