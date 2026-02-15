@@ -101,9 +101,19 @@ For **manim**:
 Rules:
 - Escape backslashes in JSON (e.g. \\\\nabla for LaTeX).
 - For plotly, "data" and "layout" must be valid Plotly.js figure spec.
-- For d3, "code" must be a single function draw(container) or equivalent that the UI can run; use only standard browser APIs and D3 if needed.
 - For manim, "code" must be a valid Manim Community Edition script with a Scene class.
 - Always include "title" and "narration" for the UI card.
+
+**Critical D3 code rules** (the code runs inside new Function(), so it must be flawless JavaScript):
+- The "code" field must define a function draw(container) { ... } that receives a DOM element.
+- ONLY use double quotes for ALL JavaScript strings. NEVER use single quotes or backticks anywhere in the code. Example: .text("hello") NOT .text('hello').
+- NEVER use apostrophes in text content. Write "Os" not "O's", "dont" not "don't", "its" not "it's".
+- NEVER use template literals (backticks). Use string concatenation with + instead: "translate(" + x + "," + y + ")" NOT `translate(${x},${y})`.
+- NEVER use arrow functions. Use function(d) { return d.x; } NOT d => d.x.
+- Keep code simple: basic D3 selections, .append(), .attr(), .text(), .style(). No complex ES6+ features.
+- Use d3.select(container) to start. Set explicit width/height on the SVG with .attr("width", ...) and .attr("height", ...).
+- All colors as hex strings: "#3b82f6", not rgb() or rgba(). For transparent, use "none".
+- Avoid special Unicode characters in .text() calls — use only basic ASCII letters, numbers, and common punctuation.
 """
 
 

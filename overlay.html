@@ -612,12 +612,21 @@
         }
 
         try {
-          canvasEl.innerHTML = '';  // clear "Rendering..." only right before exec
-          // Execute D3 code directly in page context (d3 is global from <script> in <head>)
-          var fn = new Function('container', payload.code + '\n;if(typeof draw==="function")draw(container);');
+          canvasEl.innerHTML = '';
+          var code = payload.code;
+          // Try executing D3 code directly
+          var fn;
+          try {
+            fn = new Function('container', code + '\n;if(typeof draw==="function")draw(container);');
+          } catch (syntaxErr) {
+            // Common issue: apostrophes inside single-quoted strings (e.g. 'O's!')
+            // Fix: replace all single quotes with backticks (template literals handle apostrophes)
+            console.warn('[D3 render] SyntaxError, retrying with backtick fix:', syntaxErr.message);
+            code = code.replace(/'/g, '`');
+            fn = new Function('container', code + '\n;if(typeof draw==="function")draw(container);');
+          }
           fn(canvasEl);
           console.log('[D3 render] Success — children:', canvasEl.children.length);
-          // If nothing was rendered, show a notice
           if (canvasEl.children.length === 0 && !canvasEl.querySelector('svg')) {
             canvasEl.innerHTML = '<p style="color:#f59e0b;font-size:12px;">D3 code ran but produced no visible output</p>';
           }
