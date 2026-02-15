@@ -106,15 +106,18 @@ Rules:
 
 **Critical D3 code rules** (the code runs inside new Function(), so it must be flawless JavaScript):
 - The "code" field must define a function draw(container) { ... } that receives a DOM element.
-- ONLY use double quotes for ALL JavaScript strings. NEVER use single quotes or backticks anywhere in the code. Example: .text("hello") NOT .text('hello').
-- NEVER use apostrophes in text content. Write "Os" not "O's", "dont" not "don't", "its" not "it's".
-- NEVER use template literals (backticks). Use string concatenation with + instead: "translate(" + x + "," + y + ")" NOT `translate(${x},${y})`.
+- ONLY use double quotes for ALL JavaScript strings. NEVER use single quotes or backticks anywhere.
+- NEVER use apostrophes in text content. Write "does not" not "doesn't", "it is" not "it's".
+- NEVER use template literals (backticks). Use string concatenation: "translate(" + x + "," + y + ")" NOT `translate(${x},${y})`.
 - NEVER use arrow functions. Use function(d) { return d.x; } NOT d => d.x.
-- Keep code simple: basic D3 selections, .append(), .attr(), .text(), .style(). No complex ES6+ features.
-- Use d3.select(container) to start. Use var width = container.clientWidth || 280; for width (do NOT hardcode pixel widths). Keep height COMPACT: var height = Math.min(width * 0.65, 250); — the sidebar is small so visualizations must fit in ~250px tall max. Set both on the SVG with .attr("width", width).attr("height", height).attr("viewBox", "0 0 " + width + " " + height).
-- Keep the visualization SIMPLE and COMPACT. Use small font sizes (10-12px). Do not create multi-step stacked layouts — fit everything into one compact view.
+- NEVER use let or const. Use var for ALL variable declarations.
+- EVERY opening brace { must have a matching closing brace }. EVERY opening paren ( must have a matching closing paren ). Count your brackets carefully before outputting.
+- NEVER nest .text() calls with string concatenation that contains unmatched parentheses. Keep .text() arguments simple.
+- Use d3.select(container) to start. Use var width = container.clientWidth || 280; for width (do NOT hardcode pixel widths). Set height proportionally (e.g. var height = width * 0.75;). Set both on the SVG with .attr("width", width).attr("height", height).attr("viewBox", "0 0 " + width + " " + height).
+- Make the visualization DETAILED and RICH. Use labels, color coding, arrows, annotations. Multi-step layouts are fine.
 - All colors as hex strings: "#3b82f6", not rgb() or rgba(). For transparent, use "none".
-- Avoid special Unicode characters in .text() calls — use only basic ASCII letters, numbers, and common punctuation.
+- Avoid special Unicode characters in .text() calls — use only basic ASCII.
+- Do NOT wrap the code in markdown fences or backticks. Output raw JavaScript only in the "code" field.
 """
 
 
@@ -367,7 +370,7 @@ def _fallback_ui_payload(
         "title": title,
         "narration": narration,
         "format": "latex",
-        "content": "\\text{" + (error or "No content") + "}",
+        "content": error or "Visualization could not be generated. Will retry next cycle.",
     }
     return {
         "content_type": "visualization",
