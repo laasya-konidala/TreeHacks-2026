@@ -3,7 +3,7 @@ Message models for the Ambient Learning Agent System.
 
 VLM context flows in → orchestrator routes by activity → agent generates exercise.
 """
-from typing import Optional
+from typing import Any, Optional
 from uagents import Model
 
 
@@ -47,3 +47,35 @@ class TimingSignal(Model):
     is_transition: bool = False      # switched topic or activity
     seconds_on_same_content: float = 0.0
     just_finished_something: bool = False
+
+
+# ─── Visualizer (tool returns latex | d3 | plotly | manim; UI embeds in sidebar) ───
+class VisualizerRequest(Model):
+    """Request to the visualizer: context from the agent that chose the visualization tool."""
+    concept: str = ""
+    subconcept: str = ""
+    confusion_hypothesis: str = ""
+    screen_context: str = ""
+    student_question: str = ""
+    session_id: str = ""
+
+
+class VisualizerResponse(Model):
+    """Structured response back to the orchestrator (optional)."""
+    scene_type: str = ""
+    title: str = ""
+    elements: list = []
+    animations: list = []
+    narration: str = ""
+    interactive_params: list = []
+    session_id: str = ""
+
+
+class AgentMessage(Model):
+    """Message sent to the UI / sidebar (and optionally to orchestrator)."""
+    content: str = ""
+    content_type: str = "text"       # text | visualization
+    agent_type: str = ""             # conceptual | visualizer | applied | ...
+    session_id: str = ""
+    tool_used: str = ""              # question | visualization | review | quiz
+    metadata: Optional[dict] = None  # for visualization: tier, title, content/code/figure, narration

@@ -37,10 +37,6 @@
   pointer-events: none;
 }
 
-#lc-avatar.lc-darwin img {
-  width: 62px;
-}
-
 /* Pulse ring animation when sidebar is closed */
 #lc-avatar::after {
   content: '';

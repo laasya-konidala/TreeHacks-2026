@@ -7,14 +7,16 @@ import os
 # ─── Agent Seeds (deterministic addresses) ───
 ORCHESTRATOR_SEED = "ambient_learning_orchestrator_seed_2026"
 CONCEPTUAL_SEED = "ambient_learning_conceptual_seed_2026"
+VISUALIZER_SEED = "ambient_learning_visualizer_seed_2026"
 # APPLIED_SEED = "ambient_learning_applied_seed_2026"       # TODO: add later
 # EXTENSION_SEED = "ambient_learning_extension_seed_2026"   # TODO: add later
 
 # ─── Agent Ports ───
 ORCHESTRATOR_PORT = 8000
 CONCEPTUAL_PORT = 8002
-# APPLIED_PORT = 8003    # TODO
-# EXTENSION_PORT = 8004  # TODO
+VISUALIZER_PORT = 8003
+# APPLIED_PORT = 8004    # TODO
+# EXTENSION_PORT = 8005  # TODO
 
 # ─── API Configuration ───
 BACKEND_HOST = "0.0.0.0"

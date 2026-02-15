@@ -150,10 +150,12 @@
       opacity: 1;
     }
 
-    /* ── Feed area ── */
+    /* ── Feed area (scrollable as content grows) ── */
     .feed {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 16px 20px;
       display: flex;
       flex-direction: column;
@@ -449,7 +451,124 @@
       width: 26px;
       height: 26px;
     }
+
+    /* ── Visualization cards (lighter background, click to enlarge) ── */
+    .viz-feed-card {
+      margin-top: 4px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    .viz-feed-card:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .viz-feed-card .viz-title { font-size: 14px; color: rgba(255, 255, 255, 0.95); margin-bottom: 8px; }
+    .viz-feed-card .viz-canvas { min-height: 100px; background: rgba(0, 0, 0, 0.15); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+    .viz-feed-card .viz-narration { font-size: 12px; color: rgba(255, 255, 255, 0.7); line-height: 1.4; }
+    .viz-feed-card .katex { font-size: 1.05em; }
+    .viz-feed-card .mermaid { background: transparent; }
+
+    /* ── Test viz buttons ── */
+    .test-viz-row {
+      -webkit-app-region: no-drag;
+      padding: 8px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .test-viz-row label { font-size: 11px; color: rgba(255, 255, 255, 0.5); margin-right: 4px; }
+    .test-viz-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+    }
+    .test-viz-btn:hover { background: rgba(255, 255, 255, 0.15); }
+
+    /* ── Enlarged viz modal ── */
+    .viz-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .viz-modal-backdrop.is-open {
+      display: flex;
+    }
+    .viz-modal-box {
+      background: rgba(32, 32, 45, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      max-width: 90vw;
+      max-height: 90vh;
+      width: 560px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    }
+    .viz-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .viz-modal-title { font-size: 15px; font-weight: 600; color: rgba(255, 255, 255, 0.95); }
+    .viz-modal-close {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.85);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .viz-modal-close:hover { background: rgba(255, 255, 255, 0.2); }
+    .viz-modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
+    .viz-modal-body .viz-canvas {
+      min-height: 280px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .viz-modal-body .viz-canvas .katex { font-size: 1.3em; }
+    .viz-modal-body .viz-narration {
+      margin-top: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.5;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
   <div class="panel">
@@ -458,7 +577,6 @@
       <select id="avatarSelect" class="avatar-select" title="Choose avatar">
         <option value="plato">Plato</option>
         <option value="einstein">Einstein</option>
-        <option value="darwin">Darwin</option>
       </select>
     </div>
     <div class="header">
@@ -476,6 +594,15 @@
       <div class="status-dot" id="statusDot"></div>
       <span class="status-text" id="statusText">Initializing...</span>
       <span class="mic-indicator" id="micIndicator">🎤</span>
+    </div>
+
+    <div class="test-viz-row">
+      <label>Visualize:</label>
+      <button type="button" class="test-viz-btn" data-tier="static">LaTeX</button>
+      <button type="button" class="test-viz-btn" data-tier="static-mermaid">Mermaid</button>
+      <button type="button" class="test-viz-btn" data-tier="d3">D3</button>
+      <button type="button" class="test-viz-btn" data-tier="interactive">Plotly</button>
+      <button type="button" class="test-viz-btn" data-tier="manim">Manim</button>
     </div>
 
     <div class="feed" id="feed">
@@ -515,9 +642,29 @@
     </div>
   </div>
 
+  <div class="viz-modal-backdrop" id="vizModal" aria-hidden="true">
+    <div class="viz-modal-box" role="dialog" aria-label="Enlarged visualization">
+      <div class="viz-modal-header">
+        <span class="viz-modal-title" id="vizModalTitle">Visualization</span>
+        <button type="button" class="viz-modal-close" id="vizModalClose" title="Close">×</button>
+      </div>
+      <div class="viz-modal-body">
+        <div class="viz-canvas" id="vizModalCanvas"></div>
+        <div class="viz-narration" id="vizModalNarration"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const BACKEND_ORIGIN = 'http://localhost:8080';
     const feed = document.getElementById('feed');
     const emptyState = document.getElementById('emptyState');
+    const vizModal = document.getElementById('vizModal');
+    const vizModalTitle = document.getElementById('vizModalTitle');
+    const vizModalCanvas = document.getElementById('vizModalCanvas');
+    const vizModalNarration = document.getElementById('vizModalNarration');
+    const vizModalClose = document.getElementById('vizModalClose');
+    const vizPayloadsByCardId = {};
     const toggleBtn = document.getElementById('toggleBtn');
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
@@ -676,6 +823,204 @@
       window.api.setAvatar(e.target.value);
     });
 
+    // ── Test visualization payloads (tier format: static / static-mermaid / interactive / manim) ──
+    const TEST_VIZ = {
+      static: {
+        content_type: 'visualization',
+        content: 'The gradient points uphill; gradient descent moves in the opposite direction.',
+        metadata: {
+          tier: 'static',
+          visualization: {
+            tier: 'static',
+            format: 'latex',
+            title: 'Understanding the gradient',
+            content: '\\nabla f(x) = \\left( \\frac{\\partial f}{\\partial x_1}, \\frac{\\partial f}{\\partial x_2} \\right), \\quad \\text{gradient descent: } x_{n+1} = x_n - \\alpha \\nabla f(x_n)'
+          }
+        }
+      },
+      'static-mermaid': {
+        content_type: 'visualization',
+        content: 'Flow of gradient descent.',
+        metadata: {
+          tier: 'static',
+          visualization: {
+            tier: 'static',
+            format: 'mermaid',
+            title: 'Gradient descent flow',
+            content: 'flowchart LR\nA[Start] --> B[Compute gradient]\nB --> C[Update x]\nC --> D{Converged?}\nD -->|No| B\nD -->|Yes| E[Stop]'
+          }
+        }
+      },
+      d3: {
+        content_type: 'visualization',
+        content: 'A simple D3 diagram runs in the card.',
+        metadata: {
+          tier: 'd3',
+          visualization: {
+            tier: 'd3',
+            title: 'Sample D3 diagram',
+            narration: 'Custom diagrams from the tool use D3 in a sandboxed iframe.',
+            code: 'function draw(container) { var data = [1,2,3,4,5]; container.innerHTML = ""; var sel = d3.select(container).selectAll("div").data(data).enter().append("div").style("height", "20px").style("width", function(d) { return (d * 40) + "px"; }).style("background", "#3b82f6").style("margin", "2px 0").style("border-radius", "4px"); }'
+          }
+        }
+      },
+      interactive: {
+        content_type: 'visualization',
+        content: 'Drag to explore. The red line is the regression fit.',
+        metadata: {
+          tier: 'interactive',
+          visualization: {
+            tier: 'interactive',
+            renderer: 'plotly',
+            title: 'Linear Regression — Fitting a Line',
+            narration: 'Linear regression finds the line that minimizes the sum of squared residuals.',
+            plotly_figure: {
+              data: [
+                { x: [0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2], y: [0.1,0.35,0.6,0.9,1.1,1.4,1.7,2,2.3,2.5,2.8], mode: 'markers', type: 'scatter', name: 'Data', marker: { size: 10, color: '#3b82f6' } },
+                { x: [0,2], y: [0.05,2.75], mode: 'lines', type: 'scatter', name: 'Fit', line: { color: '#ef4444', width: 2 } }
+              ],
+              layout: { title: 'Linear Regression', xaxis: { title: 'x' }, yaxis: { title: 'y' }, margin: { t: 40, b: 40, l: 50, r: 20 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(255,255,255,0.05)', font: { color: '#e5e7eb', size: 12 } }
+            }
+          }
+        }
+      },
+      manim: {
+        content_type: 'visualization',
+        content: 'Manim (3B1B-style) animations — placeholder when no backend render is running.',
+        metadata: {
+          tier: 'manim',
+          visualization: {
+            tier: 'manim',
+            title: 'Deep dive: Eigenvectors (placeholder)',
+            narration: 'Manim video would appear here when the backend pipeline is used.'
+          }
+        }
+      }
+    };
+
+    function pushTestViz(tierKey) {
+      const msg = TEST_VIZ[tierKey];
+      if (!msg) return;
+      emptyState.style.display = 'none';
+      const meta = msg.metadata || {};
+      const actualTier = meta.tier || (meta.visualization && meta.visualization.tier);
+      const vizPayload = meta.visualization || {};
+      const cardId = 'viz-' + Date.now();
+      const item = document.createElement('div');
+      item.className = 'feed-item agent-response viz-feed-card';
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      item.innerHTML = '<div class="time">' + now + ' 🎨 <span class="agent-badge">Visualization</span> ' + actualTier + '</div>' +
+        '<div class="viz-title">' + escapeHtml(vizPayload.title || 'Visualization') + '</div>' +
+        '<div class="viz-canvas" id="' + cardId + '"></div>' +
+        '<div class="viz-narration">' + escapeHtml(msg.content || vizPayload.narration || '') + '</div>';
+      vizPayloadsByCardId[cardId] = { tier: actualTier, payload: vizPayload, title: vizPayload.title || 'Visualization', narration: msg.content || vizPayload.narration || '' };
+      feed.appendChild(item);
+      feed.scrollTop = feed.scrollHeight;
+      const canvas = document.getElementById(cardId);
+      if (canvas) setTimeout(function() { renderVizInCard(actualTier, vizPayload, canvas); }, 50);
+    }
+
+    function renderVizInCard(tier, payload, canvasEl) {
+      if (!canvasEl) return;
+      const narration = payload.narration || payload.content || '';
+      // LaTeX: tool tier "latex" or overlay tier "static" with format "latex"
+      if (tier === 'latex' || tier === 'static') {
+        const fmt = payload.format || 'latex';
+        const content = payload.content || '';
+        if (fmt === 'latex' && window.katex) {
+          canvasEl.innerHTML = '';
+          var wrap = document.createElement('div');
+          wrap.className = 'viz-latex';
+          canvasEl.appendChild(wrap);
+          try {
+            katex.render(content, wrap, { throwOnError: false, displayMode: true });
+          } catch (e) {
+            wrap.innerHTML = '<pre>' + escapeHtml(content) + '</pre>';
+          }
+        } else if (fmt === 'mermaid' && window.mermaid) {
+          canvasEl.innerHTML = '<div class="mermaid">' + escapeHtml(content) + '</div>';
+          mermaid.run({ nodes: [canvasEl.querySelector('.mermaid')] }).catch(function() {});
+        } else {
+          canvasEl.innerHTML = '<pre>' + escapeHtml(content) + '</pre>';
+        }
+        return;
+      }
+      // D3: custom diagram from tool (code runs in sandboxed iframe)
+      if (tier === 'd3' && payload.code) {
+        var code = payload.code.replace(/<\/script/gi, '<\\/script');
+        var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><script src="https://d3js.org/d3.v7.min.js"><\\/script><style>body{margin:0;background:rgba(0,0,0,0.1);}</style></head><body><div id="v"></div><script>' + code + '; if (typeof draw === "function") draw(document.getElementById("v"));<\\/script></body></html>';
+        var iframe = document.createElement('iframe');
+        iframe.setAttribute('sandbox', 'allow-scripts');
+        iframe.style.cssText = 'width:100%;height:200px;border:0;border-radius:8px;';
+        iframe.srcdoc = html;
+        canvasEl.innerHTML = '';
+        canvasEl.appendChild(iframe);
+        return;
+      }
+      // Plotly: tool tier "plotly" or overlay "interactive" with plotly_figure
+      if ((tier === 'plotly' || tier === 'interactive') && payload.plotly_figure && window.Plotly) {
+        canvasEl.innerHTML = '';
+        Plotly.newPlot(canvasEl, payload.plotly_figure.data || [], payload.plotly_figure.layout || {}, { responsive: true });
+        return;
+      }
+      if (tier === 'manim') {
+        var statusUrl = payload.status_url;
+        var loadingMsg = payload.narration || 'Rendering 3B1B-style animation…';
+        if (statusUrl) {
+          canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;max-width:280px;margin:0 auto;">🎬 ' + escapeHtml(loadingMsg) + '</p><p style="color:rgba(255,255,255,0.4);font-size:11px;text-align:center;">Loading…</p>';
+          var polls = 0, maxPolls = 80;
+          var iv = setInterval(function() {
+            polls++;
+            fetch(BACKEND_ORIGIN + statusUrl).then(function(r) { return r.json(); }).then(function(data) {
+              if (data.status === 'ready' && data.url) {
+                clearInterval(iv);
+                canvasEl.innerHTML = '<video src="' + BACKEND_ORIGIN + data.url + '" controls playsinline style="width:100%;border-radius:8px;"></video>';
+              } else if (data.status === 'error') {
+                clearInterval(iv);
+                canvasEl.innerHTML = '<p style="color:#ef4444;text-align:center;font-size:12px;">' + escapeHtml(data.error || 'Render failed') + '</p>';
+              }
+            }).catch(function() {});
+            if (polls >= maxPolls) { clearInterval(iv); canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;">⏱ Timeout.</p>'; }
+          }, 1500);
+        } else {
+          canvasEl.innerHTML = '<p style="color:#9ca3af;text-align:center;max-width:280px;margin:0 auto;">🎬 ' + escapeHtml(loadingMsg) + '</p>';
+        }
+        return;
+      }
+      canvasEl.innerHTML = '<p style="color:#6b7280;">📈 ' + escapeHtml(payload.title || 'Visualization') + '</p>';
+    }
+
+    function openVizModal(cardId) {
+      var stored = vizPayloadsByCardId[cardId];
+      if (!stored) return;
+      vizModalTitle.textContent = stored.title || 'Visualization';
+      vizModalNarration.textContent = stored.narration || '';
+      vizModalNarration.style.display = stored.narration ? 'block' : 'none';
+      vizModalCanvas.innerHTML = '';
+      renderVizInCard(stored.tier, stored.payload, vizModalCanvas);
+      vizModal.classList.add('is-open');
+      vizModal.setAttribute('aria-hidden', 'false');
+    }
+    function closeVizModal() {
+      vizModal.classList.remove('is-open');
+      vizModal.setAttribute('aria-hidden', 'true');
+      if (window.Plotly && vizModalCanvas.querySelector('.plotly')) { try { Plotly.purge(vizModalCanvas); } catch (e) {} }
+    }
+    vizModalClose.addEventListener('click', closeVizModal);
+    vizModal.addEventListener('click', function(e) { if (e.target === vizModal) closeVizModal(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && vizModal.classList.contains('is-open')) closeVizModal(); });
+    feed.addEventListener('click', function(e) {
+      var card = e.target.closest('.viz-feed-card');
+      if (!card) return;
+      var canvas = card.querySelector('.viz-canvas');
+      if (!canvas || !canvas.id) return;
+      e.preventDefault();
+      openVizModal(canvas.id);
+    });
+    document.querySelectorAll('.test-viz-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { pushTestViz(btn.getAttribute('data-tier')); });
+    });
+
     // ── IPC listeners ──
     window.api.onStartMic(() => startSpeechRecognition());
     window.api.onStopMic(() => stopSpeechRecognition());
@@ -723,7 +1068,10 @@
       // Keep max 30 items
       const items = feed.querySelectorAll('.feed-item');
       while (items.length > 30 && feed.children.length > 31) {
-        feed.removeChild(feed.children[1]);
+        const removed = feed.children[1];
+        const canvas = removed.querySelector('.viz-canvas');
+        if (canvas && canvas.id) delete vizPayloadsByCardId[canvas.id];
+        feed.removeChild(removed);
       }
 
       feed.scrollTop = feed.scrollHeight;
@@ -733,16 +1081,45 @@
     window.api.onAgentResponse((msg) => {
       emptyState.style.display = 'none';
 
+      const meta = msg.metadata || {};
+      const tier = meta.tier;
+      const vizPayload = meta.visualization || meta.scene || {};
+      const isViz = msg.content_type === 'visualization' || (msg.tool_used === 'visualization' && (tier || vizPayload.tier));
+
+      if (isViz && (tier || vizPayload.tier)) {
+        const actualTier = tier || vizPayload.tier;
+        const cardId = 'viz-' + Date.now();
+        const item = document.createElement('div');
+        item.className = 'feed-item agent-response viz-feed-card';
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        item.innerHTML = '<div class="time">' + now + ' 🎨 <span class="agent-badge">Visualization</span> ' + actualTier + '</div>' +
+          '<div class="viz-title">' + escapeHtml(vizPayload.title || 'Visualization') + '</div>' +
+          '<div class="viz-canvas" id="' + cardId + '"></div>' +
+          '<div class="viz-narration">' + escapeHtml(msg.content || vizPayload.narration || '') + '</div>';
+        vizPayloadsByCardId[cardId] = { tier: actualTier, payload: vizPayload, title: vizPayload.title || 'Visualization', narration: msg.content || vizPayload.narration || '' };
+        feed.appendChild(item);
+        feed.scrollTop = feed.scrollHeight;
+        const canvas = document.getElementById(cardId);
+        if (canvas) {
+          if (window.katex || window.Plotly || window.mermaid) {
+            renderVizInCard(actualTier, vizPayload, canvas);
+          } else {
+            setTimeout(function() { renderVizInCard(actualTier, vizPayload, canvas); }, 300);
+          }
+        }
+        return;
+      }
+
       const item = document.createElement('div');
       item.className = 'feed-item agent-response';
 
       const agentEmoji = {
-        conceptual: '🧐', applied: '🔧', extension: '🚀', orchestrator: '💡'
+        conceptual: '🧐', applied: '🔧', extension: '🚀', orchestrator: '💡', visualizer: '🎨'
       }[msg.agent_type] || '🤖';
 
       const agentLabel = {
         conceptual: 'Conceptual', applied: 'Applied',
-        extension: 'Extension', orchestrator: 'Hint'
+        extension: 'Extension', orchestrator: 'Hint', visualizer: 'Visualization'
       }[msg.agent_type] || msg.agent_type;
 
       const toolEmoji = {
@@ -786,7 +1163,10 @@
       // Keep max 30 items
       const items = feed.querySelectorAll('.feed-item');
       while (items.length > 30 && feed.children.length > 31) {
-        feed.removeChild(feed.children[1]);
+        const removed = feed.children[1];
+        const canvas = removed.querySelector('.viz-canvas');
+        if (canvas && canvas.id) delete vizPayloadsByCardId[canvas.id];
+        feed.removeChild(removed);
       }
 
       feed.scrollTop = feed.scrollHeight;
