@@ -13,12 +13,18 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 import asyncio
 import json
 import logging
+import os
+import subprocess
+import tempfile
 import time
+import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import httpx
@@ -40,6 +46,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Manim output directory & static serving ───
+MANIM_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "manim_output"
+MANIM_OUTPUT_DIR.mkdir(exist_ok=True)
+app.mount("/video", StaticFiles(directory=str(MANIM_OUTPUT_DIR)), name="manim_videos")
+
+# Track render jobs: job_id → { status, url, error }
+_manim_jobs: dict[str, dict] = {}
 
 # ─── In-memory state ───
 # Stores the latest MERGED context (Gemini VLM + behavioral signals)
@@ -118,6 +132,8 @@ def _merge_context() -> dict:
         "gemini_error": gemini.get("gemini_error"),
         "gemini_mode": gemini.get("gemini_mode", ""),
         "gemini_notes": gemini.get("gemini_notes", ""),
+        "gemini_screen_details": gemini.get("gemini_screen_details", ""),
+        "gemini_natural_pause": gemini.get("gemini_natural_pause", False),
     }
 
     return merged
@@ -146,6 +162,10 @@ async def receive_context(ctx: dict):
     # Merge both sources into the unified context
     latest_context["data"] = _merge_context()
     latest_context["timestamp"] = time.time()
+
+    topic = latest_context["data"].get("detected_topic", "?")
+    mode = latest_context["data"].get("gemini_mode", "?")
+    logger.info(f"[Context] Received from {source or 'gemini'} — topic: {topic}, mode: {mode}")
 
     return {"status": "ok", "source": source or "gemini"}
 
@@ -248,6 +268,121 @@ async def websocket_endpoint(ws: WebSocket):
         except ValueError:
             pass
         logger.info(f"WebSocket client disconnected. Total: {len(ws_clients)}")
+
+
+# ─── Manim rendering ───
+
+class ManimRenderRequest(BaseModel):
+    code: str
+    session_id: str = ""
+
+
+@app.post("/manim/render")
+async def manim_render(req: ManimRenderRequest):
+    """
+    Accept a Manim script, render it in a background thread, and return a job_id.
+    The overlay polls /manim/status/{job_id} until the video is ready.
+    """
+    job_id = uuid.uuid4().hex[:12]
+    _manim_jobs[job_id] = {"status": "rendering", "url": None, "error": None}
+
+    asyncio.get_event_loop().run_in_executor(None, _run_manim_render, job_id, req.code)
+
+    return {"job_id": job_id, "status_url": f"/manim/status/{job_id}"}
+
+
+@app.get("/manim/status/{job_id}")
+async def manim_status(job_id: str):
+    """Poll render status. Returns {status, url, error}."""
+    job = _manim_jobs.get(job_id)
+    if not job:
+        return {"status": "error", "error": "Unknown job_id"}
+    return job
+
+
+def _run_manim_render(job_id: str, code: str):
+    """
+    Run manim CLI in a subprocess. Writes the script to a temp file,
+    renders to mp4 in manim_output/, and updates _manim_jobs.
+    """
+    try:
+        # Write script to a temp file
+        script_path = MANIM_OUTPUT_DIR / f"{job_id}.py"
+        script_path.write_text(code, encoding="utf-8")
+
+        # Find the Scene class name from the code
+        import re
+        scene_match = re.search(r"class\s+(\w+)\s*\(.*Scene.*\)", code)
+        scene_name = scene_match.group(1) if scene_match else "ConceptScene"
+
+        # Run manim CLI: render at 720p, output to manim_output/
+        result = subprocess.run(
+            [
+                "manim", "render",
+                "-ql",  # low quality (480p) for speed; use -qm for 720p
+                "--format", "mp4",
+                "--media_dir", str(MANIM_OUTPUT_DIR / "media"),
+                str(script_path),
+                scene_name,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"[Manim] Render failed for {job_id}: {result.stderr[-500:]}")
+            _manim_jobs[job_id] = {
+                "status": "error",
+                "url": None,
+                "error": result.stderr[-300:] or "Render failed",
+            }
+            return
+
+        # Find the rendered mp4 in the media directory
+        media_dir = MANIM_OUTPUT_DIR / "media" / "videos" / f"{job_id}" / "480p15"
+        mp4_files = list(media_dir.glob("*.mp4")) if media_dir.exists() else []
+
+        if not mp4_files:
+            # Also check other quality directories
+            for quality_dir in (MANIM_OUTPUT_DIR / "media" / "videos" / f"{job_id}").glob("*"):
+                mp4_files = list(quality_dir.glob("*.mp4"))
+                if mp4_files:
+                    break
+
+        if not mp4_files:
+            _manim_jobs[job_id] = {
+                "status": "error",
+                "url": None,
+                "error": "Render succeeded but no mp4 found",
+            }
+            return
+
+        # Move the mp4 to the root manim_output/ for simple static serving
+        final_name = f"{job_id}.mp4"
+        final_path = MANIM_OUTPUT_DIR / final_name
+        mp4_files[0].rename(final_path)
+
+        _manim_jobs[job_id] = {
+            "status": "ready",
+            "url": f"/video/{final_name}",
+            "error": None,
+        }
+        logger.info(f"[Manim] Render complete: {final_name}")
+
+    except subprocess.TimeoutExpired:
+        _manim_jobs[job_id] = {
+            "status": "error",
+            "url": None,
+            "error": "Render timed out (120s limit)",
+        }
+    except Exception as e:
+        logger.error(f"[Manim] Unexpected error for {job_id}: {e}")
+        _manim_jobs[job_id] = {
+            "status": "error",
+            "url": None,
+            "error": str(e)[:300],
+        }
 
 
 @app.get("/health")

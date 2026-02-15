@@ -1,4 +1,6 @@
 const path = require('path');
+const http = require('http');
+const url = require('url');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { app, BrowserWindow, screen, desktopCapturer, ipcMain, systemPreferences } = require('electron');
 const WebSocket = require('ws');
@@ -11,11 +13,13 @@ const CAPTURE_INTERVAL_MS = 8000;   // 8s — balances cost vs responsiveness
 const CAPTURE_WIDTH = 1280;
 const CAPTURE_HEIGHT = 720;
 const VLM_MODEL = 'claude-haiku-4-5';  // cheap + fast for frequent VLM
+const VLM_MAX_TOKENS = 800;            // enough for full JSON with screen_details
 
 // ─── State ─────────────────────────────────────────────────────────
 let sidebarWindow = null;
 let characterWindow = null;
 let sidebarVisible = false;
+let currentAvatar = 'plato'; // 'plato' | 'einstein'
 let captureInterval = null;
 let sessionActive = false;
 let claude = null;       // Anthropic client
@@ -49,6 +53,10 @@ function createCharacter() {
   characterWindow.loadFile(path.join(__dirname, 'character.html'));
   characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   characterWindow.setIgnoreMouseEvents(false);
+
+  characterWindow.webContents.once('did-finish-load', () => {
+    characterWindow.webContents.send('avatar', currentAvatar);
+  });
 }
 
 // ─── Move both windows together (fixed relative position) ──────────
@@ -71,6 +79,17 @@ ipcMain.on('toggle-sidebar', () => {
     sidebarWindow.show();
   } else {
     sidebarWindow.hide();
+  }
+  if (characterWindow && !characterWindow.isDestroyed()) {
+    characterWindow.webContents.send('sidebar-visibility', sidebarVisible);
+  }
+});
+
+// ─── Avatar selection (from sidebar dropdown) ───────────────────────
+ipcMain.on('set-avatar', (_event, avatar) => {
+  currentAvatar = avatar;
+  if (characterWindow && !characterWindow.isDestroyed()) {
+    characterWindow.webContents.send('avatar', avatar);
   }
 });
 
@@ -111,7 +130,7 @@ function createSidebar() {
 // ─── Claude Vision (screen analysis) ───────────────────────────────
 const SYSTEM_PROMPT = `You are an intelligent learning assistant observing a student's screen via periodic screenshots.
 
-Analyze each screenshot and output a concise JSON summary:
+Analyze each screenshot and output a JSON summary:
 {
   "activity": "what the student is doing right now",
   "topic": "subject/topic (e.g. eigenvalues, gradient_descent, photosynthesis)",
@@ -122,7 +141,7 @@ Analyze each screenshot and output a concise JSON summary:
   "content_type": "code | equation | text | diagram | video | mixed",
   "error_description": null or "specific error if work is incorrect",
   "natural_pause": true/false,
-  "notes": "transitions, notable details, what changed since last frame"
+  "screen_details": "VERY SPECIFIC description of what is visible on screen — read out exact text, equations, variable names, code snippets, question text, diagram labels, video titles, slide headings. Be as literal as possible so a tutor who cannot see the screen knows exactly what the student is looking at."
 }
 
 Modes (pick one based on what the student is DOING):
@@ -135,14 +154,22 @@ Timing cues — set natural_pause to true if:
 - They just finished writing something and stopped
 - They scrolled to a new section/page
 - There's a clear transition between activities
+- They seem to be idle / not actively typing or scrolling
+
+screen_details MUST include:
+- If there's a question/problem visible: quote the EXACT question text
+- If there's code: quote key lines, function names, variable names, errors
+- If there's an equation: write it out (e.g. "det(A - λI) = 0")
+- If there's a video: title, current slide/frame content, speaker's topic
+- If there's a textbook/article: heading, key paragraph content, highlighted text
+- If they wrote an answer: quote their EXACT answer so a tutor can check it
+- If there's an error message: quote it exactly
 
 Also consider:
 - Same content for multiple frames → deeply reading or stuck
 - Rapid content changes → skimming or switching tasks
-- If there's a transcript of what they said, incorporate it
-- Focus on WHAT CONCEPT they're working on and WHETHER THEIR WORK IS CORRECT
 
-Be concise. Only output the JSON, nothing else.`;
+Only output the JSON, nothing else.`;
 
 async function analyzeScreen(base64Image, speechTranscript) {
   if (!claude) return;
@@ -156,13 +183,10 @@ async function analyzeScreen(base64Image, speechTranscript) {
       promptText += contextBuffer.slice(-3).map((c, i) => `${i + 1}. ${c}`).join('\n');
     }
 
-    if (speechTranscript) {
-      promptText += `\n\nThe student just said: "${speechTranscript}"`;
-    }
-
+    // Speech transcript is NOT sent to VLM — it goes to the agent via the backend
     const response = await claude.messages.create({
       model: VLM_MODEL,
-      max_tokens: 300,
+      max_tokens: VLM_MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
@@ -254,7 +278,7 @@ function forwardToAgentBackend(vlmText, speechTranscript) {
       gemini_work_status: analysis.work_status || 'unclear',
       gemini_error: analysis.error_description || null,
       gemini_mode: analysis.mode || '',
-      gemini_notes: analysis.notes || '',
+      gemini_screen_details: analysis.screen_details || '',
       gemini_natural_pause: !!analysis.natural_pause,
 
       audio_transcript: speechTranscript || null,
@@ -264,11 +288,24 @@ function forwardToAgentBackend(vlmText, speechTranscript) {
       timestamp: new Date().toISOString(),
     };
 
-    fetch(`${BACKEND_URL}/context`, {
+    const postData = JSON.stringify(ctx);
+    const parsed = url.parse(`${BACKEND_URL}/context`);
+    const req = http.request({
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: parsed.path,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ctx),
-    }).catch(() => {});
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, (res) => {
+      res.resume(); // drain response
+      console.log(`[Forward] POST /context → ${res.statusCode}`);
+    });
+    req.on('error', (e) => console.warn('[Forward] POST failed:', e.message));
+    req.write(postData);
+    req.end();
 
   } catch (e) {
     // VLM response wasn't valid JSON — skip silently
@@ -292,7 +329,9 @@ function connectAgentWebSocket() {
     agentWs.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        console.log(`[AgentWS] ${msg.agent_type}: ${(msg.content || '').substring(0, 100)}`);
+        const tier = (msg.metadata || {}).tier || '—';
+        const hasCode = !!((msg.metadata || {}).visualization || {}).code;
+        console.log(`[AgentWS] ${msg.agent_type} | type=${msg.content_type} | tier=${tier} | hasCode=${hasCode} | ${(msg.content || '').substring(0, 80)}`);
 
         if (sidebarWindow && !sidebarWindow.isDestroyed()) {
           sidebarWindow.webContents.send('agent-response', msg);
