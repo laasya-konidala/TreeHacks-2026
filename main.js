@@ -51,11 +51,16 @@ function createCharacter() {
   characterWindow.setIgnoreMouseEvents(false);
 }
 
-// ─── Move character window (manual drag) ───────────────────────────
+// ─── Move both windows together (fixed relative position) ──────────
 ipcMain.on('move-character', (_event, dx, dy) => {
-  if (!characterWindow || characterWindow.isDestroyed()) return;
-  const [x, y] = characterWindow.getPosition();
-  characterWindow.setPosition(x + dx, y + dy);
+  if (characterWindow && !characterWindow.isDestroyed()) {
+    const [x, y] = characterWindow.getPosition();
+    characterWindow.setPosition(x + dx, y + dy);
+  }
+  if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+    const [x, y] = sidebarWindow.getPosition();
+    sidebarWindow.setPosition(x + dx, y + dy);
+  }
 });
 
 // ─── Toggle sidebar visibility ─────────────────────────────────────

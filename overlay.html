@@ -17,7 +17,7 @@
       position: absolute;
       top: 16px;
       right: 16px;
-      bottom: 16px;
+      bottom: 80px;
       width: 340px;
       background: rgba(20, 20, 30, 0.85);
       backdrop-filter: blur(20px);
@@ -37,7 +37,7 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      -webkit-app-region: drag;
+      cursor: grab;
     }
 
     .header-left {
@@ -75,7 +75,6 @@
 
     /* ── Toggle button ── */
     .toggle-btn {
-      -webkit-app-region: no-drag;
       width: 40px;
       height: 24px;
       border-radius: 12px;
@@ -272,6 +271,154 @@
     }
 
     .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* ── Slide to call (footer) ── */
+    .call-footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
+    }
+
+    .slide-to-call {
+      height: 48px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.08);
+      position: relative;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .slide-to-call-track {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 24px;
+      transition: width 0.15s ease-out;
+    }
+
+    .slide-to-call-thumb {
+      width: 44px;
+      height: 44px;
+      margin: 2px;
+      border-radius: 50%;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      z-index: 2;
+      cursor: grab;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      transition: transform 0.1s ease;
+    }
+
+    .slide-to-call-thumb:active {
+      cursor: grabbing;
+      transform: scale(0.96);
+    }
+
+    .slide-to-call-thumb svg {
+      width: 22px;
+      height: 22px;
+      color: #1a1a1a;
+      pointer-events: none;
+    }
+
+    .slide-to-call-label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ── In-call UI (voice speaking bars) ── */
+    .in-call-ui {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+    }
+
+    .in-call-ui.visible {
+      display: flex;
+    }
+
+    .voice-bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+    }
+
+    .voice-bar {
+      width: 4px;
+      min-height: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 2px;
+      animation: voicePulse 0.6s ease-in-out infinite alternate;
+    }
+
+    .voice-bar:nth-child(1) { animation-delay: 0s; }
+    .voice-bar:nth-child(2) { animation-delay: 0.1s; }
+    .voice-bar:nth-child(3) { animation-delay: 0.2s; }
+    .voice-bar:nth-child(4) { animation-delay: 0.15s; }
+    .voice-bar:nth-child(5) { animation-delay: 0.05s; }
+    .voice-bar:nth-child(6) { animation-delay: 0.25s; }
+    .voice-bar:nth-child(7) { animation-delay: 0.1s; }
+
+    @keyframes voicePulse {
+      from { height: 8px; opacity: 0.6; }
+      to { height: 28px; opacity: 1; }
+    }
+
+    .in-call-label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+    }
+
+    .end-call-btn {
+      width: 56px;
+      height: 56px;
+      border: none;
+      border-radius: 50%;
+      background: #ef4444;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 2px 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .end-call-btn:hover {
+      background: #dc2626;
+      transform: scale(1.05);
+    }
+
+    .end-call-btn:active {
+      transform: scale(0.96);
+    }
+
+    .end-call-btn svg {
+      width: 26px;
+      height: 26px;
+    }
   </style>
 </head>
 <body>
@@ -299,6 +446,35 @@
         <div>Toggle the switch to start.<br>I'll watch your screen and listen<br>to understand what you're learning.</div>
       </div>
     </div>
+
+    <div class="call-footer">
+      <div class="in-call-ui" id="inCallUI">
+        <div class="voice-bars" aria-hidden="true">
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+        </div>
+        <span class="in-call-label">Speaking…</span>
+        <button class="end-call-btn" id="endCallBtn" title="End call">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="slide-to-call" id="slideToCall">
+        <div class="slide-to-call-track" id="slideTrack"></div>
+        <div class="slide-to-call-thumb" id="slideThumb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+        </div>
+        <span class="slide-to-call-label">Slide to call agent</span>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -311,8 +487,87 @@
     const agentIcon = document.getElementById('agentIcon');
     const agentName = document.getElementById('agentName');
     const agentMode = document.getElementById('agentMode');
+    const header = document.querySelector('.header');
 
     let isActive = false;
+
+    // ── Manual drag for header (moves cat + sidebar together) ──
+    let headerDragging = false;
+    let headerStartX = 0;
+    let headerStartY = 0;
+
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.toggle-btn') || e.target.closest('.call-footer')) return;
+      headerDragging = true;
+      headerStartX = e.screenX;
+      headerStartY = e.screenY;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!headerDragging) return;
+      const dx = e.screenX - headerStartX;
+      const dy = e.screenY - headerStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        window.api.moveWindow(dx, dy);
+        headerStartX = e.screenX;
+        headerStartY = e.screenY;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      headerDragging = false;
+    });
+
+    // ── Slide to call (design only, no functionality yet) ──
+    const slideToCall = document.getElementById('slideToCall');
+    const slideThumb = document.getElementById('slideThumb');
+    const slideTrack = document.getElementById('slideTrack');
+    let slideDragging = false;
+    let slideStartX = 0;
+    let slideThumbStartX = 0;
+
+    slideThumb.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      slideDragging = true;
+      slideStartX = e.clientX;
+      slideThumbStartX = slideThumb.offsetLeft;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!slideDragging) return;
+      const trackWidth = slideToCall.offsetWidth - slideThumb.offsetWidth - 4;
+      let newLeft = slideThumbStartX + (e.clientX - slideStartX);
+      newLeft = Math.max(2, Math.min(trackWidth, newLeft));
+      slideThumb.style.left = newLeft + 'px';
+      slideTrack.style.width = newLeft + 'px';
+    });
+
+    const inCallUI = document.getElementById('inCallUI');
+    const endCallBtn = document.getElementById('endCallBtn');
+
+    document.addEventListener('mouseup', () => {
+      if (slideDragging) {
+        const trackWidth = slideToCall.offsetWidth - slideThumb.offsetWidth - 4;
+        const threshold = trackWidth * 0.75;
+        if (slideThumb.offsetLeft >= threshold) {
+          slideThumb.style.left = trackWidth + 'px';
+          slideTrack.style.width = trackWidth + 'px';
+          slideToCall.style.display = 'none';
+          inCallUI.classList.add('visible');
+        } else {
+          slideThumb.style.left = '2px';
+          slideTrack.style.width = '0px';
+        }
+        slideDragging = false;
+      }
+    });
+
+    endCallBtn.addEventListener('click', () => {
+      inCallUI.classList.remove('visible');
+      slideToCall.style.display = 'flex';
+      slideThumb.style.left = '2px';
+      slideTrack.style.width = '0px';
+    });
 
     // ── Speech Recognition (Web Speech API — runs locally) ──
     let recognition = null;
