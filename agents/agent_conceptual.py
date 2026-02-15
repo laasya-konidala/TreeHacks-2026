@@ -57,26 +57,27 @@ claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 # ─── Tool Selection Prompt ───
 TOOL_SELECTION_SYSTEM = """You are a learning assistant deciding HOW to help a student who is building conceptual understanding.
 
-You have 2 tools. Pick ONE based on the trigger reason, mastery, and what's on screen:
+You have 2 tools. Pick ONE based on what would help most RIGHT NOW:
 
-"visualization" — Generate a diagram, chart, or interactive visual. STRONGLY PREFERRED. Use when:
-  - The content involves equations, formulas, or mathematical relationships
-  - There are abstract concepts that benefit from a concrete visual representation
-  - The student is reading/watching and a different modality would reinforce understanding
-  - The student is stuck and a visual could clarify the concept
-  - There are spatial, structural, or relational ideas (graphs, circuits, data structures, flows)
-  - You want to show how variables relate, how a process works, or what a concept looks like
+"visualization" — Show a diagram, graph, flowchart, or visual model. STRONGLY PREFERRED. Use when:
+  - The screen shows equations, formulas, or math notation
+  - The topic involves relationships between things (networks, trees, flows, cause-effect)
+  - The content is abstract or theoretical (definitions, proofs, algorithms)
+  - A diagram would clarify structure better than words
+  - The student is reading/watching and a visual gives a fresh angle
+  - There are spatial, structural, or relational ideas (graphs, circuits, data structures)
   - natural_pause: visualize what they just learned as a recap
   - topic_transition: show how the new topic connects visually to the old one
 
-"voice_call" — Start a spoken dialogue with the student. Use ONLY when:
-  - The concept is purely definitional and doesn't benefit from a visual
-  - You specifically want to quiz them verbally on recall
+"voice_call" — Start a spoken dialogue. Use ONLY when:
+  - The concept is purely definitional and does not benefit from a visual
+  - The student is stuck and needs a gentle guiding question
+  - The content is practical/applied (coding, problem-solving) where talking helps more
   - The screen content is too vague to create a meaningful visualization
 
-Default to "visualization" if unsure — visuals are almost always more engaging and helpful.
+Default to "visualization" if unsure — visuals are the core feature.
 
-Respond with ONLY: {"tool": "voice_call|visualization", "reasoning": "brief reason"}"""
+Respond with ONLY: {"tool": "visualization"} or {"tool": "voice_call"}"""
 
 TOOL_SELECTION_USER = """Screen details:
 {screen_details}
@@ -227,7 +228,8 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
                 recent_observations=recent_obs,
             )
             tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
-            if '"voice_call"' in tool_text:
+            # Case-insensitive check — default to visualization
+            if "voice_call" in tool_text.lower():
                 tool = "voice_call"
             else:
                 tool = "visualization"
@@ -295,10 +297,21 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
             logger.info(f"{'─' * 60}")
 
         except Exception as e:
-            logger.error(f"  ❌ Visualization generation failed: {e}")
-            content = "I wanted to show you a visualization, but ran into an issue. Keep going!"
-            content_type = "text"
-            metadata = None
+            logger.error(f"  ❌ Visualization generation failed: {e}", exc_info=True)
+            # Still send as visualization type so the UI shows it properly
+            content = f"Visualization generation encountered an error: {e}"
+            content_type = "visualization"
+            metadata = {
+                "tier": "latex",
+                "visualization": {
+                    "tier": "latex",
+                    "title": f"Visualizing {topic}",
+                    "narration": "Could not generate visualization this time.",
+                    "format": "latex",
+                    "content": "\\text{Visualization unavailable — retrying next cycle}",
+                },
+                "scene": {},
+            }
     else:
         # ── voice_call or other text-based tools ──
         logger.info(f"  🗣️ Step 2: Generating {tool} content (LLM call 2)...")
