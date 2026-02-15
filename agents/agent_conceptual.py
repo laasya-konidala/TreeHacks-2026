@@ -23,6 +23,12 @@ from agents.models import AgentRequest, AgentResponse
 
 logger = logging.getLogger(__name__)
 
+# ─── Tool rotation state ───
+# Tracks recent tool usage so we alternate between visualization and voice_call.
+# After MAX_CONSECUTIVE uses of the same tool, force a switch.
+_tool_history: list[str] = []         # most recent tools used
+MAX_CONSECUTIVE_SAME_TOOL = 2         # switch after this many in a row
+
 # ─── Agent Setup ───
 CONCEPTUAL_SEED = "ambient_learning_conceptual_seed_2026"
 CONCEPTUAL_PORT = 8002
@@ -194,9 +200,42 @@ async def handle_request(ctx: Context, sender: str, msg: AgentRequest):
 
     recent_obs = "\n".join(msg.recent_observations[-3:]) if msg.recent_observations else "No recent observations."
 
-    # Step 1: Pick the best tool
-    tool = "visualization"
-    logger.info("  🔀 Step 1: Tool hardcoded to visualization")
+    # Step 1: Pick the best tool (LLM chooses, but force switch after 2 in a row)
+    global _tool_history
+    consecutive_same = (
+        len(_tool_history) >= MAX_CONSECUTIVE_SAME_TOOL
+        and all(t == _tool_history[-1] for t in _tool_history[-MAX_CONSECUTIVE_SAME_TOOL:])
+    )
+
+    if consecutive_same:
+        # Force switch — used the same tool too many times
+        last = _tool_history[-1]
+        tool = "voice_call" if last == "visualization" else "visualization"
+        logger.info(f"  🔀 Step 1: Forced switch → {tool} (used {last} {MAX_CONSECUTIVE_SAME_TOOL}x in a row)")
+    else:
+        # Let Claude decide based on context
+        logger.info("  🔀 Step 1: Picking tool (LLM call 1)...")
+        tool = "voice_call"  # default
+        try:
+            tool_user_msg = TOOL_SELECTION_USER.format(
+                screen_details=screen_details,
+                topic=topic,
+                mastery=mastery_pct,
+                mastery_quality=mastery_quality,
+                trigger_reason=trigger_reason,
+                recent_observations=recent_obs,
+            )
+            tool_text = _call_claude(TOOL_SELECTION_SYSTEM, tool_user_msg, max_tokens=100)
+            if '"visualization"' in tool_text:
+                tool = "visualization"
+            else:
+                tool = "voice_call"
+            logger.info(f"  🔀 Tool selected: {tool}  (Claude said: {tool_text[:80]})")
+        except Exception as e:
+            logger.warning(f"  ⚠️ Tool selection failed, defaulting to voice_call: {e}")
+            tool = "voice_call"
+
+    _tool_history.append(tool)
 
     # Step 2: Generate the exercise using the selected tool
     content_type = "text"
