@@ -111,7 +111,8 @@ Rules:
 - NEVER use template literals (backticks). Use string concatenation with + instead: "translate(" + x + "," + y + ")" NOT `translate(${x},${y})`.
 - NEVER use arrow functions. Use function(d) { return d.x; } NOT d => d.x.
 - Keep code simple: basic D3 selections, .append(), .attr(), .text(), .style(). No complex ES6+ features.
-- Use d3.select(container) to start. Use var width = container.clientWidth || 280; for width (do NOT hardcode pixel widths). Set height proportionally (e.g. var height = width * 0.7;). Set both on the SVG with .attr("width", width).attr("height", height).attr("viewBox", "0 0 " + width + " " + height).
+- Use d3.select(container) to start. Use var width = container.clientWidth || 280; for width (do NOT hardcode pixel widths). Keep height COMPACT: var height = Math.min(width * 0.65, 250); — the sidebar is small so visualizations must fit in ~250px tall max. Set both on the SVG with .attr("width", width).attr("height", height).attr("viewBox", "0 0 " + width + " " + height).
+- Keep the visualization SIMPLE and COMPACT. Use small font sizes (10-12px). Do not create multi-step stacked layouts — fit everything into one compact view.
 - All colors as hex strings: "#3b82f6", not rgb() or rgba(). For transparent, use "none".
 - Avoid special Unicode characters in .text() calls — use only basic ASCII letters, numbers, and common punctuation.
 """

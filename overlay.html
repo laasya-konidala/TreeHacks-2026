@@ -226,21 +226,21 @@
       overflow: visible;
       border: 1px solid rgba(255, 255, 255, 0.12);
       background: rgba(255, 255, 255, 0.06);
-      padding: 12px;
+      padding: 10px;
     }
     .viz-feed-card .viz-title {
-      font-size: 13px;
+      font-size: 12px;
       color: rgba(255, 255, 255, 0.95);
       font-weight: 600;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .viz-feed-card .viz-canvas {
-      min-height: 120px;
-      max-height: 420px;
+      min-height: 100px;
+      max-height: 300px;
       background: rgba(0, 0, 0, 0.15);
       border-radius: 8px;
-      padding: 10px;
-      margin-bottom: 6px;
+      padding: 8px;
+      margin-bottom: 4px;
       overflow-x: hidden;
       overflow-y: auto;
     }
@@ -742,11 +742,16 @@
         item.innerHTML = '<div class="time">' + now + ' 🎨 ' + actualTier + '</div>' +
           '<div class="viz-title">' + escapeHtml(vizPayload.title || 'Visualization') + '</div>' +
           '<div class="viz-canvas" id="' + cardId + '"></div>' +
-          '<div class="viz-narration">' + escapeHtml(msg.content || vizPayload.narration || '') + '</div>';
+          '<div class="viz-narration">' + escapeHtml((msg.content || vizPayload.narration || '').substring(0, 150)) + '</div>';
         feed.appendChild(item);
         feed.scrollTop = feed.scrollHeight;
         const canvas = document.getElementById(cardId);
-        if (canvas) setTimeout(function() { renderVizInCard(actualTier, vizPayload, canvas); }, 50);
+        if (canvas) setTimeout(function() {
+          renderVizInCard(actualTier, vizPayload, canvas);
+          // Re-scroll after render so the full card (including narration) is visible
+          setTimeout(function() { feed.scrollTop = feed.scrollHeight; }, 100);
+          setTimeout(function() { feed.scrollTop = feed.scrollHeight; }, 500);
+        }, 50);
         return;
       }
 
